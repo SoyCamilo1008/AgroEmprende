@@ -70,9 +70,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # Solo tiene sentido cuando ya existen migraciones. En la Fase 1 el directorio no
-    # existe, así que el job se omite en lugar de fallar.
-    if: ${{ hashFiles('supabase/migrations/*.sql') != '' }}
+    # `hashFiles()` no existe en un `if` a nivel de job (solo en el de un step),
+    # así que esta condición no se puede evaluar aquí: GitHub rechazaba todo el
+    # workflow y ningún job corría. Desde la Fase 2 el directorio siempre existe;
+    # si alguna vez dejara de existir, `db:reset` fallaría, que es la señal justa.
 
     steps:
       - uses: actions/checkout@v4
