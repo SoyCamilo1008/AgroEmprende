@@ -10,6 +10,103 @@ Conventional Commits, y es el commit el que decide en qué sección entra el cam
 
 Cambios en `main` que todavía no tienen versión.
 
+### Añadido
+
+- **Base de datos (Fase 2)**: nueve migraciones que crean la base multiusuario.
+  - Esquemas `core`, `catalog` y `private`. `private` aloja las funciones de decisión de
+    RLS y queda fuera de `[api].schemas` a propósito.
+  - Organizaciones, membresías, roles, permisos, unidades de negocio, unidades de
+    medida, cuentas base, parámetros de referencia, auditoría, clientes, contactos y
+    proveedores.
+  - RLS en todas las tablas de negocio, con contexto de organización que **falla
+    cerrado** cuando el usuario pertenece a más de una y no ha elegido.
+  - `public.create_organization_with_business_unit()` e invitaciones
+    (`create_organization_invitation`, `accept_organization_invitation`): funciones
+    `SECURITY DEFINER` transaccionales e idempotentes. El token de invitación son 32
+    bytes criptográficos, de un solo uso y atado al correo del invitado.
+  - **Propiedad de la organización**: la invariante de "exactamente un propietario
+    activo" la garantiza la base de datos. El índice único parcial cubre el "como máximo
+    uno" y un trigger de restricción diferido cubre el "al menos uno", que es lo que
+    permite transferir la propiedad escribiendo los dos lados en una sola transacción.
+    `public.transfer_organization_ownership()` hace la transferencia: comprueba sesión,
+    bloquea la fila de la organización para serializar transferencias simultáneas, exige
+    que quien llama sea el propietario actual (un `admin` no puede tomársela), valida que
+    el destinatario exista, pertenezca a la granja y esté activo, degrada al anterior a
+    `admin` y audita el cambio.
+  - **Integridad multitenant en la propia base**: las referencias entre granjas se
+    declaran con la organización dentro de la clave foránea
+    (`(organization_id, id)`), no solo por `id`. RLS decide qué filas puede ver un rol,
+    no qué filas pueden existir: una fila colgada de otra granja es ilegible pero sigue
+    siendo válida. Aplica a `member_business_units` (que además cuelga de la
+    _membresía_, no de un `user_id` suelto), `accounts.parent_id` y
+    `reference_parameters.business_unit_id`.
+  - Seed de plantilla: 55 permisos, 5 roles, matriz rol→permiso, unidades de medida y
+    plan de cuentas base. Sin datos reales y sin parámetros de referencia.
+  - Pruebas pgTAP en `supabase/tests/`: aislamiento entre organizaciones, denegaciones
+    por permiso, las cuatro propiedades del token de invitación, la invariante del
+    propietario y la integridad multitenant.
+- **`tools/check-schema.mjs`** (`pnpm tooling:check-schema`): compara el seed contra
+  `packages/types/src`, exige RLS en toda tabla y **simula los `GRANT`/`REVOKE` de las
+  migraciones en orden** para detectar dos fallos que ninguna otra capa ve: una migración
+  que borra los permisos que otra ya concedió, y una tabla con RLS que queda
+  inalcanzable. Sin esto, un permiso agregado en TypeScript y olvidado en el seed se
+  deniega en silencio, y un `revoke` global deja la base entera inaccesible sin que nada
+  falle al escribir el SQL.
+- **CI**: el job `migrations` ahora ejecuta `db:test` después de `db:reset` y `db:lint`,
+  y el job `verify` ejecuta `tooling:check-schema`.
+
+### Corregido
+
+- **Una organización podía quedarse sin propietario.** El índice único parcial
+  `organization_members_one_active_owner` solo decía "como máximo un owner": nada
+  impedía que un `admin` degradara o desactivara al único propietario, y una organización
+  sin dueño no se puede recuperar desde la propia base de datos. Ahora un trigger de
+  restricción diferido exige **exactamente** un propietario activo al cerrar la
+  transacción.
+- **Filas que podían colgar de otra granja.** `member_business_units.business_unit_id`,
+  `member_business_units.user_id`, `accounts.parent_id` y
+  `reference_parameters.business_unit_id` apuntaban solo por `id`, así que una fila podía
+  referenciar algo de otra organización. Las políticas de RLS filtraban la lectura, no la
+  escritura: la fila era ilegible pero no inválida. Ahora las cuatro son claves foráneas
+  compuestas con `organization_id`, y el alcance por unidad cuelga de la membresía, de
+  modo que desaparece con ella en vez de sobrevivir a una baja.
+- **Los permisos de la base de datos se anulaban entre migraciones.** M3 a M8 ejecutaban
+  `revoke all on all tables in schema core` después de que M2 concediera los permisos, y
+  como cada migración no puede saber qué concedió la anterior, el revoke se llevaba
+  todo: al final solo `core.organization_invitations` era alcanzable y ninguna otra tabla
+  de `core` tenía `GRANT` para `anon` ni `authenticated`. El esquema era correcto y
+  estaba documentado, y a la vez inaccesible. Ahora cada migración revoca solo sus
+  propias tablas, y `tooling:check-schema` falla si alguien repite el patrón.
+- **Un usuario invitado no podía crear su propia organización.** La idempotencia sin
+  llave buscaba la primera membresía activa del usuario, así que a un `viewer` invitado a
+  la granja de otro le devolvía esa granja como si fuera suya. Ahora se pregunta por
+  `organizations.created_by`: "ya tengo organización" significa "esta es la mía".
+- **`private.write_audit_log()` colgaba la auditoría de la organización más antigua a la
+  que se había unido el usuario**, no de la del contexto, que es lo que hace todo lo
+  demás. En un usuario con dos organizaciones eso significaba auditar en una
+  organización una operación de la otra.
+- `create_organization_invitation()` con un usuario en varias organizaciones y sin
+  contexto devolvía `Permiso requerido: org.members.manage`, un error de rol donde el
+  problema es que la petición no dijo de qué organización se trata. Ahora dice eso, con su
+  propio código.
+- `supabase/tests/`: el esquema donde la CLI instala `pgtap` se añade al `search_path`.
+  Sin eso, las aserciones no se resuelven y la suite muere con `function is(...) does not
+exist`, que dice bastante menos que la causa real.
+- `packages/types/src/business-units.ts`: `la vistaRequested` → `la vista solicitada`.
+- `docs/database/costing.md`: `para no acumulado error` → `para no acumular error`.
+- Comentario engañoso en `accept_organization_invitation`: decía que aceptar dos veces no
+  fallaba, cuando el token es de un solo uso por diseño. El comentario ahora describe el
+  comportamiento real.
+- `apps/mobile`: `expo-env.d.ts` pasa a estar ignorado y fuera del índice, en vez de
+  generar un diff en cada arranque de Expo.
+
+### Sin verificar
+
+- **El esquema no se ha aplicado contra PostgreSQL.** Docker no está disponible en la
+  máquina de desarrollo, así que las nueve migraciones, el seed y las pruebas pgTAP no se
+  han ejecutado. Hasta que el job `migrations` del CI pase, el SQL puede tener errores
+  de sintaxis o políticas que no se comporten como dicen los comentarios.
+
 ## [0.1.0] — 2026-09-27
 
 Primera versión: arquitectura del monorepo y motor de cálculo. No incluye base de datos

@@ -10,7 +10,8 @@ como si fuera un hecho.
 
 ## Estado actual
 
-Fase 1 — arquitectura y motor de cálculo. Lo que ya funciona y está verificado:
+Fase 2 — base de datos multiusuario. La Fase 1 (arquitectura y motor de cálculo) sigue
+verificada; la tabla refleja el estado de ambas.
 
 | Componente                   | Estado                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------- |
@@ -21,7 +22,21 @@ Fase 1 — arquitectura y motor de cálculo. Lo que ya funciona y está verifica
 | `@agroemprende/supabase`     | Clientes de Supabase (web con SSR, móvil) y validación de env                     |
 | `apps/web`                   | Next.js 16 con App Router                                                         |
 | `apps/mobile`                | Expo 57 con Expo Router                                                           |
-| Base de datos                | Pendiente: todavía no hay migraciones (empieza en Fase 2)                         |
+| Base de datos                | Esquema, RLS, seed y pruebas escritos. **Sin aplicar ni probar** (ver abajo)      |
+
+### La base de datos está escrita, no verificada
+
+Nueve migraciones en `supabase/migrations/`, un seed de plantilla y cuatro archivos de
+pruebas pgTAP en `supabase/tests/`.
+
+**No han sido aplicadas contra PostgreSQL.** Aplicarlas exige Docker, que no está
+disponible en la máquina de desarrollo, así que hasta que el job `migrations` del CI pase
+en verde el esquema no está verificado: el SQL podría tener un error de sintaxis o una
+política que no se comporte como dice. Lo que sí se puede verificar sin Docker
+(`pnpm tooling:check`) está en verde, y valida los nombres y el orden de las migraciones y
+que los permisos del seed coincidan con los de TypeScript.
+
+Esto no es un detalle: un esquema sin ejecutar es una hipótesis, no una base de datos.
 
 Verificación local (debe quedar en verde antes de abrir un PR):
 
@@ -78,7 +93,10 @@ depende de `calculations` únicamente para formatear dinero, no para calcular.
 | `pnpm build`             | Build de producción                                      |
 | `pnpm db:start`          | Levanta Supabase local (Docker)                          |
 | `pnpm db:reset`          | Recrea la base desde migraciones y carga el seed         |
+| `pnpm db:lint`           | Analiza el esquema resultante                            |
+| `pnpm db:test`           | Pruebas pgTAP del aislamiento multiusuario (Docker)      |
 | `pnpm migrations:new`    | Crea una migración con el nombre y la cabecera correctos |
+| `pnpm tooling:check`     | Reglas de migración y coherencia esquema/código          |
 
 ## Variables de entorno
 

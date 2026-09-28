@@ -52,7 +52,7 @@ independientes y la app los trata así.
   **sobre huevos buenos**.
 - La postura es un porcentaje con base 100 (`posturaBase` 30 huevos por cubeta es un
   parámetro `configured` del sistema). El porcentaje se calcula sin redondear y se
-  redondea una sola vez al presentar, para no acumulado error.
+  redondea una sola vez al presentar, para no acumular error.
 - El margen por huevo es `(precio − costo variable por huevo) / precio`, con el precio de
   referencia del momento (`reference`, no histórico). Si el usuario no tiene precio de
   referencia, el margen queda pendiente.

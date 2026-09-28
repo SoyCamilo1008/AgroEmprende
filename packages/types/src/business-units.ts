@@ -39,6 +39,6 @@ export interface BusinessUnit {
 /** Filtro de negocio para cualquier consulta financiera o productiva. */
 export interface BusinessUnitScope {
   readonly businessUnitId: BusinessUnitId;
-  /** true = la vistaRequested agrega todas las unidades (solo roles superiores). */
+  /** true = la vista solicitada agrega todas las unidades (solo roles superiores). */
   readonly includeAll: boolean;
 }

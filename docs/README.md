@@ -30,17 +30,27 @@ editan: un ADR que ya no describe la realidad se reemplaza por otro más nuevo.
 
 ## Arquitectura
 
-- [Autenticación y organizaciones](architecture/auth.md) — registro, organizaciones,
-  roles y el límite del multitenant.
-- [Row Level Security](architecture/rls.md) — por qué la base de datos es la autoridad
-  y qué se hace con las escrituras.
+- [Autenticación y organizaciones](architecture/auth.md) — registro, onboarding,
+  invitaciones, roles y el límite del multitenant.
+- [Row Level Security](architecture/rls.md) — por qué la base de datos es la autoridad,
+  cómo se resuelve el contexto de organización y qué se hace con las escrituras.
 
 ## Base de datos
 
-- [Migraciones](database/migrations.md) — nombre, cabeceras, qué está prohibido y el
-  flujo de trabajo. Las verifica `pnpm tooling:check-migrations`.
+- [Migraciones](database/migrations.md) — nombre, cabeceras, qué está prohibido, el
+  orden de la Fase 2 y el flujo de trabajo.
 - [Costeo](database/costing.md) — cómo se reparte el costo del alimento, del agua y de
   la mano de obra entre lotes, cerdos y cortes.
+
+## Estado de la Fase 2
+
+El esquema, el seed y las pruebas están escritos. **No están aplicados**: eso exige
+Docker, que no está en la máquina de desarrollo. Lo que sí corre sin Docker
+(`pnpm tooling:check`) está en verde.
+
+La diferencia importa. Un RLS que deja pasar de más también pasa `db lint` y `db reset`;
+solo una prueba de aislamiento lo detecta, y esa prueba todavía no se ha ejecutado. Ver
+la sección [Base de datos](../README.md#la-base-de-deatos-está-escrita-no-verificada).
 
 ## Referencia rápida
 

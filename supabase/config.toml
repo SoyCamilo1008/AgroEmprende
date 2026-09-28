@@ -11,7 +11,12 @@ project_id = "agroemprende"
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "graphql_public"]
+# Exposición a PostgREST: los esquemas de dominio (`core`, `catalog`) se
+# declaran aquí para que el cliente los consulte con `.schema('core')`.
+# `private` NO va en la lista: contiene las funciones que usa RLS para decidir
+# el acceso y no son parte de la API.
+# Exponer un esquema no bypasea ninguna política: sigue mandando RLS.
+schemas = ["public", "graphql_public", "core", "catalog"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 

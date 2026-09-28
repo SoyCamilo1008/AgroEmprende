@@ -33,6 +33,8 @@ out/
 *.tsbuildinfo
 # Generado por `next build` y por el dev server; nunca se edita a mano.
 next-env.d.ts
+# Generado por `expo start` / `expo prebuild`; nunca se edita a mano.
+expo-env.d.ts
 
 # ─ Expo / React Native
 .expo/
