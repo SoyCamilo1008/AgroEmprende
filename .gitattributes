@@ -1,0 +1,32 @@
+# Normalización de fin de línea: LF en el repositorio, CRLF en Windows
+* text=auto eol=lf
+
+# Migraciones y SQL: LF obligatorio (algunos clientes los parsean sensible)
+*.sql text eol=lf
+*.md text eol=lf
+
+# Binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.mp4 binary
+*.mp3 binary
+*.zip binary
+*.gz binary
+
+# Firmas y certificados
+*.jks binary
+*.keystore binary
+*.p12 binary
+*.mobileprovision binary
+
+# Lockfiles: no generar diffs
+pnpm-lock.yaml linguist-generated=true -diff

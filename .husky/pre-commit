@@ -1,0 +1,11 @@
+# Hook pre-commit.
+#
+# 1. `pnpm lint` corre el lint del monorepo completo con Turborepo. No se usa ESLint
+#    archivo por archivo: cada paquete tiene su propia configuración flat y ESLint 9 la
+#    busca desde el directorio de trabajo, así que desde la raíz no encontraría ninguna.
+# 2. `lint-staged` formatea solo lo que está en el índice, que es lo que se commiteará.
+#
+# El lint falla y detiene el commit en vez de corregir solo: una corrección automática
+# puede cambiar comportamiento. Para corregir: `pnpm lint:fix`.
+pnpm lint
+pnpm exec lint-staged

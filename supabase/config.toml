@@ -1,0 +1,76 @@
+# Configuración local de Supabase (Supabase CLI).
+# Este archivo SÍ se versiona: define cómo se reproduce el entorno local.
+#
+#   supabase start    → levanta Postgres, Auth, Storage, Realtime y Edge Runtime
+#   supabase db reset → aplica TODAS las migraciones desde cero y carga el seed
+#
+# Ver docs/database/migrations.md
+
+project_id = "agroemprende"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+# Puerto de la base de datos "sombra" usada por `supabase db diff` para
+# comparar el estado real con lo que dicen las migraciones.
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+port = 54329
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "25Mi"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_anonymous_sign_ins = false
+
+# Decisión de seguridad: en la v1 NO hay registro público de organizaciones.
+# El primer usuario crea su propia organización (ver docs/architecture/auth.md).
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[auth.mfa]
+enabled = true
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 8083
+
+[analytics]
+enabled = false
+
+# Seed: datos de PLANTILLA (roles, permisos, catálogos). Nunca datos reales.
+# Ver docs/database/migrations.md y supabase/seed/README.md
+# Las rutas son relativas al directorio supabase/ (no a la raíz del repositorio).
+[db.seed]
+enabled = true
+sql_paths = ["./seed/seed.sql"]

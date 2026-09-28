@@ -1,0 +1,13 @@
+# Configuración local de Supabase: NUNCA versionar
+# - archivos .temp con contenedores y secretos de la CLI
+# - ramas locales de base de datos (son bases completas)
+# - volcados y datos de pruebas
+.branches
+.temp
+data
+.env
+.env.*
+!.env.example
+*.dump
+*.backup
+*.sql.gz

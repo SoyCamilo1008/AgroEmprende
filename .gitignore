@@ -1,0 +1,97 @@
+# ── Dependencias ────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+vendor/
+
+# ── Secretos: NUNCA versionar (ver .env.example) ────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+service-role*.json
+
+# ── Firmas móviles ──────────────────────────────────────────────────────────
+*.jks
+*.keystore
+*.mobileprovision
+*.orig.*.jks
+android/
+ios/
+
+# ── Builds ──────────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+# Generado por `next build` y por el dev server; nunca se edita a mano.
+next-env.d.ts
+
+# ─ Expo / React Native
+.expo/
+.expo-shared/
+.expo/types/
+*.jks.*
+web-build/
+metro-cache/
+
+# ── Tests ───────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Datos sensibles que NUNCA deben subirse ─────────────────────────────────
+# Backups / dumps de base de datos
+*.dump
+*.backup
+*.sql.gz
+*.tar.gz
+supabase/.branches/
+supabase/.temp/
+supabase/data/
+backups/
+dumps/
+# Seeds y CSVs con datos reales (los plantillas sí se versionan)
+supabase/seed/private/
+supabase/seed/**/*.private.csv
+private/
+*.private.json
+
+# ── Sistema operativo / editores ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+*.swp
+*.swo
+*~
+
+# ── Otros ───────────────────────────────────────────────────────────────────
+# Excepción intencional: supabase/migrations/*.sql SÍ se versiona (es el
+# registro de la estructura de la base de datos, ver docs/database/migrations.md)
+.vercel/
+.eas/
+*.tsbuildinfo
+storybook-static/
+.cache/

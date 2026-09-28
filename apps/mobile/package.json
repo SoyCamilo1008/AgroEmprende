@@ -1,0 +1,45 @@
+{
+  "name": "@agroemprende/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "description": "Aplicación móvil de AgroEmprende (Expo) para registro rápido en campo.",
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "start": "expo start --production",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf .expo .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@agroemprende/calculations": "workspace:*",
+    "@agroemprende/supabase": "workspace:*",
+    "@agroemprende/types": "workspace:*",
+    "@agroemprende/validation": "workspace:*",
+    "@expo/metro-runtime": "^57.0.16",
+    "@react-native-async-storage/async-storage": "^3.1.1",
+    "@supabase/supabase-js": "^2.117.2",
+    "@tanstack/react-query": "^5.104.0",
+    "expo": "^57.0.25",
+    "expo-constants": "^57.0.19",
+    "expo-linking": "^57.0.11",
+    "expo-router": "^57.0.23",
+    "expo-secure-store": "^57.0.4",
+    "expo-status-bar": "^57.0.1",
+    "react": "^19.3.0",
+    "react-native": "^0.87.1",
+    "react-native-safe-area-context": "^5.10.0",
+    "react-native-screens": "^4.28.0",
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@agroemprende/config": "workspace:*",
+    "@types/react": "^19.3.0",
+    "eslint": "^9.39.5",
+    "typescript": "^5.9.3"
+  }
+}

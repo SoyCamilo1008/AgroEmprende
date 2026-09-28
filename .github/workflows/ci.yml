@@ -1,0 +1,96 @@
+name: CI
+
+# Objetivo: ningún PR llega a `main` sin pasar formato, lint, tipos, pruebas y build.
+# Los mismos comandos que exige el hook local, para que el fallo aparezca en el PR y no
+# tres días después en la rama de trabajo.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Un commit nuevo cancela la ejecución anterior del mismo ref: el CI no acumula jobs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# El CI solo necesita leer el repositorio.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verificar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Clonar el repositorio
+        uses: actions/checkout@v4
+
+      # Lee la versión fijada en `package.json` (`packageManager`), sin duplicarla aquí.
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Verificar reglas de migraciones
+        run: pnpm tooling:check-migrations
+
+      - name: Verificar formato
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Tipos
+        run: pnpm typecheck
+
+      - name: Pruebas
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  migrations:
+    name: Migraciones aplicables
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Solo tiene sentido cuando ya existen migraciones. En la Fase 1 el directorio no
+    # existe, así que el job se omite en lugar de fallar.
+    if: ${{ hashFiles('supabase/migrations/*.sql') != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Levantar Supabase local
+        run: |
+          supabase start
+          # `db reset` aplica TODAS las migraciones desde cero y carga el seed: es la
+          # única forma de detectar una migración que depende de otra en mal orden.
+          pnpm db:reset
+
+      - name: Analizar el esquema resultante
+        run: pnpm db:lint

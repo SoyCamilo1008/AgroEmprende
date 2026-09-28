@@ -1,0 +1,29 @@
+{
+  "name": "@agroemprende/validation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Esquemas Zod compartidos: web, mobile, Edge Functions y validacion en base de datos.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf .turbo coverage *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@agroemprende/types": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@agroemprende/config": "workspace:*",
+    "@vitest/coverage-v8": "^5.0.2",
+    "eslint": "^9.39.5",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  }
+}

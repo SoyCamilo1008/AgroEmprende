@@ -1,0 +1,30 @@
+{
+  "name": "@agroemprende/supabase",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fábricas de clientes Supabase y validación de variables de entorno, compartidas por web, mobile y scripts.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts",
+    "./mobile": "./src/mobile.ts",
+    "./env": "./src/env.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@agroemprende/config": "workspace:*",
+    "@agroemprende/types": "workspace:*",
+    "eslint": "^9.39.5",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.9.3"
+  }
+}

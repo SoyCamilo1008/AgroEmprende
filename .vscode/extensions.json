@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "supabase.supabase-vscode",
+    "editorconfig.editorconfig",
+    "github.vscode-github-actions",
+    "prisma.prisma"
+  ]
+}

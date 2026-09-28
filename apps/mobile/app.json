@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "AgroEmprende",
+    "slug": "agroemprende",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "agroemprende",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.agroemprende.app"
+    },
+    "android": {
+      "package": "com.agroemprende.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

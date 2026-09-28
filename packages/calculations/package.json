@@ -1,0 +1,31 @@
+{
+  "name": "@agroemprende/calculations",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Motor de calculos financieros y productivos. Funciones puras, sin IO, con pruebas exhaustivas.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf .turbo coverage *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@agroemprende/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@agroemprende/config": "workspace:*",
+    "@vitest/coverage-v8": "^5.0.2",
+    "decimal.js": "^10.6.0",
+    "eslint": "^9.39.5",
+    "fast-check": "^4.10.2",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  }
+}

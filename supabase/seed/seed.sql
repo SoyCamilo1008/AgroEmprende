@@ -1,0 +1,41 @@
+-- Seed de DESARROLLO: datos de plantilla, nunca datos reales.
+--
+-- Ver supabase/seed/README.md para las reglas y docs/decisions/ADR-0011-datos-reales.md
+-- para el principio que las respalda.
+--
+-- Estado: MARCADOR DE LA FASE 1.
+--
+-- Todavía no hay migraciones en supabase/migrations/, así que las tablas que este
+-- archivo va a poblar (core.roles, core.permissions, core.role_permissions,
+-- core.accounts, core.reference_parameters, core.business_units) todavía no existen.
+-- Por eso este archivo no inserta nada todavía: un seed que falla al arrancar local
+-- es peor que un seed vacío que se llena en la Fase 2 junto con el esquema.
+--
+-- Contenido previsto cuando exista el esquema:
+--
+--   1. core.permissions          → los códigos de PERMISSIONS en @agroemprende/types.
+--                                   La lista vive en TypeScript; aquí se replica. Un
+--                                   PR que agregue un permiso actualiza ambos.
+--   2. core.roles                → owner, admin, manager, operator, viewer.
+--   3. core.role_permissions     → la matriz de la tabla en docs/architecture/auth.md.
+--   4. core.accounts             → cuentas contables base (caja, bancos por cobrar,
+--                                   ventas, inventario, gastos, capital). El plan de
+--                                   cuentas completo se define con el contador.
+--   5. core.reference_parameters → parámetros etiquetados con su data_kind, para que
+--                                   ninguna pantalla los presente como hechos medidos:
+--                                     measured    | medido en campo
+--                                     historical  | hecho consumado y registrado
+--                                     reference   | precio de referencia actual
+--                                     planned     | supuesto de planificación
+--                                     configured  | parámetro del sistema
+--   6. Unidades de negocio de ejemplo, marcadas como plantilla.
+--
+-- Dos reglas al escribirlo:
+--   * Nada de INSERT sin ON CONFLICT: `supabase db reset` y `supabase start` ejecutan
+--     el seed más de una vez sobre la misma base.
+--   * Nada de datos reales, ni de ejemplo creíbles. Las cuentas de plantilla se
+--     nombran con su función, no con el nombre de una granja.
+--
+-- Verificación: pnpm db:reset
+
+select 1;

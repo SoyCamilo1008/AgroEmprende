@@ -1,0 +1,27 @@
+{
+  "name": "@agroemprende/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Configuraciones compartidas: ESLint, Prettier y preset de Tailwind.",
+  "exports": {
+    "./eslint/base": "./eslint/base.mjs",
+    "./eslint/react": "./eslint/react.mjs",
+    "./eslint/next": "./eslint/next.mjs",
+    "./prettier": "./prettier/index.mjs",
+    "./tailwind": "./tailwind/index.ts"
+  },
+  "dependencies": {
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.0",
+    "typescript-eslint": "^8.70.1"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "eslint": ">=9"
+  }
+}
