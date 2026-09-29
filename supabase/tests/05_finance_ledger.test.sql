@@ -10,7 +10,7 @@
 
 begin;
 
-select plan(29);
+select plan(30);
 
 create schema if not exists tests;
 
@@ -392,6 +392,49 @@ select throws_ok(
   '23: la escritura directa de un asiento sin contraparte es rechazada por el invariante'
 );
 
+-- Y la rama DELETE del mismo invariante: borrar una línea de un asiento que sí
+-- estaba balanceado lo deja descuadrado, y el trigger debe decirlo. Hoy ninguna
+-- función borra líneas y ningún permiso lo permite, pero la defensa existe para
+-- cuando exista, y esta prueba la ejecuta: sin la rama `TG_OP = 'DELETE'` el
+-- trigger aborta con `record "new" is not assigned yet` en vez de `22023`.
+--
+-- Las dos líneas entran en UN solo `insert`: con las restricciones ya inmediatas
+-- el trigger corre al final de cada sentencia, y dos sentencias dejarían el
+-- asiento descuadrado ya en la primera.
+select throws_ok(
+  $sql$
+    do $$
+    declare
+      v_entry_id uuid;
+      v_account_id uuid;
+    begin
+      select a.id into v_account_id
+      from core.accounts a
+      where a.organization_id = tests.id('org_a') and a.code = '1305'
+      limit 1;
+
+      insert into finance.ledger_entries (
+        organization_id, business_unit_id, entry_date, entry_type, source_type, source_id
+      )
+      values (
+        tests.id('org_a'), tests.id('bu_a'), current_date, 'sale',
+        'test.delete-line', gen_random_uuid()
+      )
+      returning id into v_entry_id;
+
+      insert into finance.ledger_lines (organization_id, entry_id, account_id, debit, credit)
+      values (tests.id('org_a'), v_entry_id, v_account_id, 100, 0),
+             (tests.id('org_a'), v_entry_id, v_account_id, 0, 100);
+
+      delete from finance.ledger_lines
+      where entry_id = v_entry_id and credit = 100;
+    end $$;
+  $sql$,
+  '22023',
+  null,
+  '24: borrar una línea de un asiento balanceado es rechazado por el invariante'
+);
+
 set constraints all deferred;
 set local role authenticated;
 select tests.act_as(tests.id('user_owner_a'));
@@ -405,7 +448,7 @@ select is(
    where source_type = 'finance.sales'
      and entry_type = 'reversal'),
   0::bigint,
-  '24: todavía no hay ningún contra-asiento'
+  '25: todavía no hay ningún contra-asiento'
 );
 
 create temp table voided_sale (id uuid);
@@ -415,13 +458,13 @@ limit 1;
 
 select lives_ok(
   $$ select public.void_sale((select id from voided_sale limit 1)) $$,
-  '25: void_sale escribe la reversa sin errores'
+  '26: void_sale escribe la reversa sin errores'
 );
 
 select is(
   (select count(*) from finance.sales),
   2::bigint,
-  '26: la venta anulada permanece en el registro (no se borra)'
+  '27: la venta anulada permanece en el registro (no se borra)'
 );
 
 select is(
@@ -429,13 +472,13 @@ select is(
    where source_type = 'finance.sales'
      and entry_type = 'reversal'),
   1::bigint,
-  '27: quedó exactamente un contra-asiento de reversa'
+  '28: quedó exactamente un contra-asiento de reversa'
 );
 
 select is(
   (select count(*) from core.audit_log where action in ('create_sale', 'void_sale')),
   3::bigint,
-  '28: se auditó la creación y la anulación de la venta'
+  '29: se auditó la creación y la anulación de la venta'
 );
 
 -- Segunda anulación: idempotente en el rechazo, no en el hecho.
@@ -443,7 +486,7 @@ select throws_ok(
   $$ select public.void_sale((select id from voided_sale limit 1)) $$,
   '22023',
   null,
-  '29: anular dos veces devuelve el error verdadero, no re-contabiliza'
+  '30: anular dos veces devuelve el error verdadero, no re-contabiliza'
 );
 
 select * from finish();

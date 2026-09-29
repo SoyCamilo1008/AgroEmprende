@@ -162,6 +162,10 @@ comment on table finance.ledger_lines is
 -- claro) y este trigger de restricción DIFERIDO garantiza la invariante aunque
 -- alguien escriba líneas por otra vía. Diferido porque las líneas de un asiento
 -- llegan de una en una y la cuenta solo cuadra al cierre de la transacción.
+--
+-- Cubre UPDATE y DELETE aunque hoy nada los ejecute (las líneas son inmutables y
+-- ningún permiso las concede): la invariante se defiende también de la función
+-- futura que alguien escriba para deshacer algo.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 create or replace function private.assert_ledger_entry_balances()
@@ -170,14 +174,15 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  v_entry_id uuid := coalesce(new.entry_id, old.entry_id);
+  -- Por `TG_OP`, no por `coalesce(new.entry_id, old.entry_id)`: en PL/pgSQL `NEW`
+  -- NO está asignado en un DELETE, y desreferenciarlo aborta la sentencia con
+  -- `record "new" is not assigned yet` en vez de comprobar el balance. El trigger
+  -- cubre DELETE precisamente para que borrar una línea no deje un asiento
+  -- descuadrado en silencio, así que esa rama tiene que funcionar.
+  v_entry_id uuid := case when tg_op = 'DELETE' then old.entry_id else new.entry_id end;
   v_debits numeric(18, 2);
   v_credits numeric(18, 2);
 begin
-  if v_entry_id is null then
-    return null;
-  end if;
-
   select coalesce(sum(l.debit), 0), coalesce(sum(l.credit), 0)
   into v_debits, v_credits
   from finance.ledger_lines l
