@@ -95,7 +95,12 @@ jobs:
           # `supabase start` exige Docker, que no se puede asumir en la máquina de
           # quien desarrolla. Por eso la Fase 2 no está verificada hasta que este
           # job pasa en verde.
-          supabase start
+          #
+          # Por el SCRIPT, no por `supabase` a secas: la CLI es una devDependency
+          # del repositorio, y un `run:` no hereda el `node_modules/.bin` que arma
+          # pnpm. Invocado en crudo, el runner responde "command not found" y el
+          # job muere antes de levantar nada.
+          pnpm db:start
           # `db reset` aplica TODAS las migraciones desde cero y carga el seed: es la
           # única forma de detectar una migración que depende de otra en mal orden.
           pnpm db:reset
