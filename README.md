@@ -10,8 +10,9 @@ como si fuera un hecho.
 
 ## Estado actual
 
-Fase 2 — base de datos multiusuario. La Fase 1 (arquitectura y motor de cálculo) sigue
-verificada; la tabla refleja el estado de ambas.
+Fase 3 — fundación financiera (libro mayor, ventas, cartera, pagos, gastos, inversiones).
+Las fases 1 (arquitectura y motor de cálculo) y 2 (base multiusuario) siguen verificadas;
+la tabla refleja el estado de todas.
 
 | Componente                   | Estado                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------- |
@@ -26,8 +27,11 @@ verificada; la tabla refleja el estado de ambas.
 
 ### La base de datos está escrita, no verificada
 
-Nueve migraciones en `supabase/migrations/`, un seed de plantilla y cuatro archivos de
-pruebas pgTAP en `supabase/tests/`.
+Trece migraciones en `supabase/migrations/`, un seed de plantilla y seis archivos de
+pruebas pgTAP en `supabase/tests/`. Las cuatro últimas migraciones escriben el esquema
+`finance`: libro mayor de doble partida, ventas, cartera, pagos, gastos, inversiones y
+reinversiones, con la escritura restringida a funciones `SECURITY DEFINER` y las tablas
+de solo lectura por RLS.
 
 **No han sido aplicadas contra PostgreSQL.** Aplicarlas exige Docker, que no está
 disponible en la máquina de desarrollo, así que hasta que el job `migrations` del CI pase
@@ -81,22 +85,22 @@ depende de `calculations` únicamente para formatear dinero, no para calcular.
 
 ## Comandos
 
-| Comando                  | Qué hace                                                 |
-| ------------------------ | -------------------------------------------------------- |
-| `pnpm dev`               | Levanta las apps en modo desarrollo                      |
-| `pnpm check`             | Formato, lint, tipos y pruebas (lo que exige el PR)      |
-| `pnpm format`            | Aplica Prettier                                          |
-| `pnpm lint` / `lint:fix` | ESLint con reglas tipadas                                |
-| `pnpm typecheck`         | `tsc --noEmit` por paquete                               |
-| `pnpm test`              | Vitest                                                   |
-| `pnpm test:coverage`     | Vitest con cobertura                                     |
-| `pnpm build`             | Build de producción                                      |
-| `pnpm db:start`          | Levanta Supabase local (Docker)                          |
-| `pnpm db:reset`          | Recrea la base desde migraciones y carga el seed         |
-| `pnpm db:lint`           | Analiza el esquema resultante                            |
-| `pnpm db:test`           | Pruebas pgTAP del aislamiento multiusuario (Docker)      |
-| `pnpm migrations:new`    | Crea una migración con el nombre y la cabecera correctos |
-| `pnpm tooling:check`     | Reglas de migración y coherencia esquema/código          |
+| Comando                  | Qué hace                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `pnpm dev`               | Levanta las apps en modo desarrollo                                          |
+| `pnpm check`             | Formato, lint, tipos y pruebas (lo que exige el PR)                          |
+| `pnpm format`            | Aplica Prettier                                                              |
+| `pnpm lint` / `lint:fix` | ESLint con reglas tipadas                                                    |
+| `pnpm typecheck`         | `tsc --noEmit` por paquete                                                   |
+| `pnpm test`              | Vitest                                                                       |
+| `pnpm test:coverage`     | Vitest con cobertura                                                         |
+| `pnpm build`             | Build de producción                                                          |
+| `pnpm db:start`          | Levanta Supabase local (Docker)                                              |
+| `pnpm db:reset`          | Recrea la base desde migraciones y carga el seed                             |
+| `pnpm db:lint`           | Analiza el esquema resultante                                                |
+| `pnpm db:test`           | Pruebas pgTAP del aislamiento multiusuario y del negocio financiero (Docker) |
+| `pnpm migrations:new`    | Crea una migración con el nombre y la cabecera correctos                     |
+| `pnpm tooling:check`     | Reglas de migración y coherencia esquema/código                              |
 
 ## Variables de entorno
 

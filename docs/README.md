@@ -38,15 +38,20 @@ editan: un ADR que ya no describe la realidad se reemplaza por otro más nuevo.
 ## Base de datos
 
 - [Migraciones](database/migrations.md) — nombre, cabeceras, qué está prohibido, el
-  orden de la Fase 2 y el flujo de trabajo.
+  orden de las fases 2 y 3 y el flujo de trabajo.
 - [Costeo](database/costing.md) — cómo se reparte el costo del alimento, del agua y de
   la mano de obra entre lotes, cerdos y cortes.
 
-## Estado de la Fase 2
+## Estado de las fases 2 y 3
 
 El esquema, el seed y las pruebas están escritos. **No están aplicados**: eso exige
 Docker, que no está en la máquina de desarrollo. Lo que sí corre sin Docker
 (`pnpm tooling:check`) está en verde.
+
+La Fase 3 agregó el esquema `finance`: libro mayor de doble partida (asientos inmutables
+con invariante de balance), ventas, cartera, pagos, gastos, inversiones y
+reinversiones. La escritura pasa solo por funciones `SECURITY DEFINER` con permiso y
+alcance de unidad validados; las tablas son de solo lectura por RLS.
 
 La diferencia importa. Un RLS que deja pasar de más también pasa `db lint` y `db reset`;
 solo una prueba de aislamiento lo detecta, y esa prueba todavía no se ha ejecutado. Ver

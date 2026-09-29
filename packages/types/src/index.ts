@@ -44,16 +44,24 @@ export { PERMISSIONS, ROLES } from './auth';
 
 export type {
   CustomerBalance,
+  Expense,
+  ExpenseType,
+  Investment,
+  LedgerEntry,
+  LedgerLine,
+  Payable,
   Payment,
+  PaymentAllocation,
+  PaymentAssignment,
   PaymentMethod,
   Receivable,
   ReceivableStatus,
+  Reinvestment,
   Sale,
   SaleItem,
-  SaleStatus,
   UserFacingPaymentStatus,
 } from './finance';
-export { PAYMENT_METHODS, PAYMENT_STATUSES, RECEIVABLE_STATUSES, SALE_STATUSES } from './finance';
+export { EXPENSE_TYPES, PAYMENT_METHODS, PAYMENT_STATUSES, RECEIVABLE_STATUSES } from './finance';
 
 export type {
   DailyProduction,

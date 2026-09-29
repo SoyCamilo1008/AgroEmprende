@@ -12,6 +12,33 @@ Cambios en `main` que todavía no tienen versión.
 
 ### Añadido
 
+- **Base de datos (Fase 3, fundación financiera)**: cuatro migraciones que escriben el
+  esquema `finance`.
+  - **Libro mayor de doble partida**: `ledger_entries` y `ledger_lines` inmutables con
+    RLS de solo lectura. La invariante `sum(débitos) = sum(créditos)` la garantiza la
+    base dos veces: `private.post_ledger_entry` valida antes de escribir y un trigger de
+    restricción **diferido** (`ledger_lines_balance_invariant`) la exige aunque alguien
+    escriba líneas directo. Un error contable se corrige con un contra-asiento
+    (`reversal`), nunca editando la historia.
+  - **Ventas y cartera**: `create_sale` (documento, líneas, cartera y asiento 1305/4105
+    en una sola transacción; número de factura secuencial por organización, cliente y
+    método validados) y `void_sale` (reversa 4190/1305, bloqueada si la venta tiene
+    pagos aplicados).
+  - **Gastos, inversiones y reinversiones**: `create_expense` (cuenta derivada del tipo
+    de gasto; a crédito crea el pagable y abona 2105, de contado abona caja/bancos),
+    `create_investment` (capitaliza en 1590) y `create_reinvestment` (3110 → 3120).
+  - **Pagos**: `register_payment` aplica por vencimiento (FIFO) o por asignación
+    explícita; el exceso de un cobro queda como dinero del cliente (2210) y el de un
+    pago de salida como cuenta por cobrar al proveedor (1310), nunca como caja sin
+    explicación. Un pago sin deuda abierta se descarta completo.
+  - **Escritura por funciones nada más**: las tablas de `finance` son de solo lectura por
+    RLS; toda escritura exige permiso (`finance.*`) y alcance sobre la unidad
+    (`can_write_business_unit`), el mismo patrón de la Fase 2. `finance` quedó en
+    `[api].schemas`; `private` sigue deliberadamente fuera.
+  - Pruebas pgTAP nuevas: `05_finance_ledger.test.sql` (asientos, ventas, gastos,
+    inversiones, reinversiones y anulación) y `06_finance_payments.test.sql` (FIFO,
+    sobrepago → 2210, gasto a crédito y asignaciones). Modo sin Docker, se ejecutan en
+    el job `migrations` del CI.
 - **Base de datos (Fase 2)**: nueve migraciones que crean la base multiusuario.
   - Esquemas `core`, `catalog` y `private`. `private` aloja las funciones de decisión de
     RLS y queda fuera de `[api].schemas` a propósito.
@@ -103,9 +130,10 @@ exist`, que dice bastante menos que la causa real.
 ### Sin verificar
 
 - **El esquema no se ha aplicado contra PostgreSQL.** Docker no está disponible en la
-  máquina de desarrollo, así que las nueve migraciones, el seed y las pruebas pgTAP no se
-  han ejecutado. Hasta que el job `migrations` del CI pase, el SQL puede tener errores
-  de sintaxis o políticas que no se comporten como dicen los comentarios.
+  máquina de desarrollo, así que las trece migraciones, el seed y los seis archivos de
+  pruebas pgTAP no se han ejecutado. Hasta que el job `migrations` del CI pase, el SQL
+  puede tener errores de sintaxis o políticas que no se comporten como dicen los
+  comentarios.
 
 ## [0.1.0] — 2026-09-27
 

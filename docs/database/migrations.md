@@ -31,11 +31,12 @@ aplicación nunca se usa para decidir qué tablas existen.
    Estas reglas las verifica `tools/check-migrations.mjs` y corren en local y en CI.
 
 5. **Esquemas por dominio**: `core` (organizaciones, unidades, permisos, auditoría),
-   `catalog` (catálogos compartidos sin datos de cliente), `finance`, `poultry`, `swine`,
-   `inventory`, `ai`. Además hay un esquema `private` que **nunca** se expone a la API:
+   `catalog` (catálogos compartidos sin datos de cliente), `finance` (libro mayor, ventas,
+   cartera y pagos), `poultry`, `swine`, `inventory`, `ai`. Además hay un esquema
+   `private` que **nunca** se expone a la API:
    aloja las funciones que RLS necesita para decidir (`current_organization_id`,
-   `has_permission`, `assert_permission`) y que el cliente no debe poder llamar
-   directamente. Todo lo demás queda detrás de RLS.
+   `has_permission`, `assert_permission`, `can_write_business_unit`) y que el cliente no
+   debe poder llamar directamente. Todo lo demás queda detrás de RLS.
 6. **`private` no se expone**: `supabase/config.toml` lista `core` y `catalog` en
    `[api].schemas`, y `private` está deliberadamente fuera. Un `SECURITY DEFINER` con
    `search_path = ''` y todas las referencias calificadas es lo que evita que un atacante
@@ -83,6 +84,35 @@ la base multiusuario, no el módulo financiero. Los permisos de esos dominios s�
 desde el seed, para que la matriz de roles refleje la visión completa y cada fase traiga
 solo las tablas que le tocan.
 
+## Migraciones de la Fase 3
+
+Cuatro migraciones que escriben el esquema `finance`. Dependen de la Fase 2 y se aplican
+después de ella (el `-- depends_on:` apunta a `..._enforce_organization_ownership.sql`).
+
+| Migración                         | Qué crea                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `..._create_finance_ledger.sql`   | Libro mayor: `ledger_entries`, `ledger_lines`, cuenta 2210 y su backfill |
+| `..._create_finance_sales.sql`    | Ventas, líneas y cartera; `create_sale` y `void_sale`                    |
+| `..._create_finance_expenses.sql` | Pagables, gastos, inversiones y reinversiones con sus funciones          |
+| `..._create_finance_payments.sql` | Pagos, asignaciones (`FIFO` o explícitas) y `register_payment`           |
+
+El diseño se apoya en dos invariantes que la base garantiza, no el cliente:
+
+- **Doble partida**: todo asiento queda en balance (`sum(débitos) = sum(créditos)`). La
+  función `private.post_ledger_entry` valida antes de escribir y un trigger de restricción
+  **diferido** (`ledger_lines_balance_invariant`) lo garantiza incluso si alguien escribe
+  líneas por otra vía. Las líneas nunca se actualizan ni se borran: un error se corrige
+  con un contra-asiento (`reversal`).
+- **Escritura por funciones nada más**: las tablas del esquema `finance` son de solo
+  lectura por RLS; toda escritura pasa por `create_sale`, `void_sale`, `create_expense`,
+  `create_investment`, `create_reinvestment` y `register_payment`, todas `SECURITY
+DEFINER` con `search_path = ''`, permiso (`finance.*`) y alcance de unidad
+  (`can_write_business_unit`) verificados.
+
+`finance` se agregó a `[api].schemas` en `supabase/config.toml`; `private` sigue fuera,
+que es condición del diseño. Ver [ADR-0003](../decisions/ADR-0003-doble-partida.md) y
+[ADR-0004](../decisions/ADR-0004-unidades-de-negocio.md).
+
 ## Flujo de trabajo
 
 ```bash
@@ -118,7 +148,7 @@ deniega en silencio. El verificador falla antes de que eso llegue a `main`.
   Auth, Storage). Está versionado a propósito.
 - El proyecto remoto (project ref, región) se configura por variables de entorno o por
   `supabase link`; no va en el repositorio.
-- Las nueve migraciones de la Fase 2 están escritas pero **no han sido aplicadas**: aplicar
+- Las migraciones de las fases 2 y 3 están escritas pero **no han sido aplicadas**: aplicar
   y probar el esquema exige Docker, que no está disponible en la máquina de desarrollo.
   Hasta que el job `migrations` del CI pase en verde, el esquema no está verificado contra
   PostgreSQL. Ver [testing](../testing.md).

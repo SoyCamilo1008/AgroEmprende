@@ -68,12 +68,22 @@ prueba el aislamiento directamente:
 | `02_invitations.test.sql`      | Token de invitación: entropía, uso único y vínculo con el correo                     |
 | `03_ownership.test.sql`        | Un único propietario por organización y las reglas de su transferencia               |
 | `04_tenant_integrity.test.sql` | Que ninguna fila pueda colgar de algo de otra granja                                 |
+| `05_finance_ledger.test.sql`   | Libro mayor, ventas, gastos, inversiones, reinversiones y anulación                  |
+| `06_finance_payments.test.sql` | Pagos: FIFO, sobrepago → saldo a favor (2210), gasto a crédito y asignaciones        |
 
 Cada archivo es una transacción con `rollback`, así que se pueden declarar helpers sin
 contaminar el siguiente archivo. Las aserciones corren con el rol `authenticated` puesto,
 porque la consulta que se evalúa **dentro** de `is(...)` tiene que sufrir los grants y las
 políticas reales: si el papel se quedara en superusuario, el RLS se saltaría y la prueba
 mediría lo contrario de lo que dice medir.
+
+`05_finance_ledger.test.sql` y `06_finance_payments.test.sql` prueban el **negocio
+financiero**, no solo la frontera: cada función de negocio debe dejar el libro mayor en
+balance (débitos = créditos), la cartera nace por el total de la venta, el pago se aplica
+por vencimiento (FIFO) y el exceso queda como anticipo del cliente (2210) y no como caja
+sin explicación, y un gasto a crédito crea su pagable. Ninguna de esas cosas se ve en las
+pantallas hasta la siguiente fase, así que la única forma de no llegar ciego a ellas es
+probarlas contra PostgreSQL.
 
 `04_tenant_integrity.test.sql` es la excepción deliberada, y por eso lleva el motivo
 escrito en la cabecera: corre **sin** cambiar de rol a propósito. Una referencia cruzada
@@ -122,8 +132,9 @@ Ser honesto sobre esto importa más que la cobertura:
 - **Las apps no tienen pruebas de componentes ni de integración.** `apps/web` y
   `apps/mobile` exponen `lint` y `typecheck`, no `test`.
 - **No hay E2E.** Se agrega cuando exista un flujo real de registro sobre la base.
-- **Las pruebas SQL cubren la frontera, no el negocio.** No hay pruebas de ventas,
-  inventario ni producción: son los módulos de las fases siguientes.
+- **Las pruebas SQL cubren la base multiusuario y la fundación financiera, no la
+  operación diaria.** No hay pruebas de inventario, alimento, aves ni producción: son los
+  módulos de las fases siguientes.
 - **`pnpm tooling:check-schema` no es una prueba de base de datos.** Compara que los
   permisos del seed coincidan con los de TypeScript, que toda tabla tenga RLS y que los
   `GRANT`/`REVOKE` de las migraciones, aplicados en orden, dejen cada tabla alcanzable.
