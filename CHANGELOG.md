@@ -84,6 +84,20 @@ Cambios en `main` que todavía no tienen versión.
 
 ### Corregido
 
+- **El CI moría antes de ejecutar una sola prueba.** La versión de Node fijada
+  (`.nvmrc` y `engines`: `22.11.0`) no cumplía el requisito de vitest 5
+  (`node: ^22.12.0 || ^24.0.0 || >=26.0.0`), así que `pnpm test` terminaba con
+  código 1 de inmediato en el job `Verificar`, sin llegar a ejecutar un solo
+  archivo de pruebas. En verde local porque la máquina tenía Node 26: el fallo
+  solo existía donde la versión se respeta, que es el CI. Ahora se fija `22.12.0`,
+  el mínimo que acepta la cadena de herramientas, en `.nvmrc`, `engines` y el
+  README.
+- **El job `Migraciones aplicables` moría en `supabase start`.** La CLI es una
+  `devDependency` del repositorio, y un paso `run:` no hereda el `node_modules/.bin`
+  que arma pnpm: el runner respondía `command not found` y las migraciones nunca
+  llegaban a ejecutarse. El paso ahora invoca el script declarado (`pnpm db:start`),
+  que es el mismo comando con el PATH correcto.
+
 - **Una organización podía quedarse sin propietario.** El índice único parcial
   `organization_members_one_active_owner` solo decía "como máximo un owner": nada
   impedía que un `admin` degradara o desactivara al único propietario, y una organización

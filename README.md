@@ -51,7 +51,8 @@ pnpm build   # compila apps/web
 
 ## Requisitos
 
-- Node.js `22.11.0` (ver `.nvmrc`; `engine-strict` lo exige)
+- Node.js `22.12.0` (ver `.nvmrc`; `engine-strict` lo exige, y es el mínimo que
+  acepta vitest 5)
 - pnpm `12.6.0` (fijado en `package.json` con `packageManager`)
 - Docker, solo si vas a levantar Postgres local con Supabase CLI
 
