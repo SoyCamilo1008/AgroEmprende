@@ -6,6 +6,7 @@
  *  2. No se edita una migración ya aplicada (detecta collisiones de timestamp).
  *  3. Todo archivo declara su dependencia con `-- depends_on:` si existe.
  *  4. No hay sentencias prohibidas en una migración de esquema.
+ *  5. `supabase/config.toml` no usa secciones ni valores que la CLI rechace.
  *
  * Se ejecuta en local y en CI: `pnpm tooling:check-migrations`
  */
@@ -13,6 +14,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const MIGRATIONS_DIR = join(process.cwd(), 'supabase', 'migrations');
+const CONFIG_PATH = join(process.cwd(), 'supabase', 'config.toml');
 
 /** Timestamp de 14 dígitos: 20260927120000 */
 const FILE_NAME_PATTERN = /^(\d{14})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
@@ -88,6 +90,75 @@ for (const file of files) {
 }
 
 for (const warning of warnings) console.warn(`⚠ ${warning}`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// config.toml
+//
+// `supabase start` valida este archivo ANTES de mirar Docker, y un valor que la
+// CLI no acepta lo aborta en un segundo con un error que no menciona ni la clave
+// ni el servicio: el síntoma es "no arrancó" y la causa está lejos. Eso costó un
+// ciclo entero de CI descubrirlo, así que las dos formas conocidas se comprueban
+// aquí, en local, en un segundo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Secciones que la CLI deprecó: avisan en cada arranque. */
+const DEPRECATED_CONFIG_SECTIONS = [
+  {
+    pattern: /^\s*\[inbucket\]\s*$/m,
+    reason: '[inbucket] está deprecada: usa [local_smtp]',
+  },
+];
+
+/**
+ * Campos que la CLI exige como número de bytes, no como tamaño con sufijo.
+ * `file_size_limit = "25Mi"` produce `invalid suffix: 'mi'`.
+ */
+const BYTE_SIZED_KEYS = ['file_size_limit'];
+
+/** Sufijos que la CLI acepta en un valor de tamaño (Go, no IEC). */
+const VALID_SIZE_SUFFIXES = /\d+\s*(b|kb|mb|gb|tb|kib|mib|gib|tib)$/i;
+
+const checkConfig = async () => {
+  let contents;
+  try {
+    contents = await readFile(CONFIG_PATH, 'utf-8');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      problems.push('supabase/config.toml no existe: la CLI no puede levantar nada sin él');
+      return;
+    }
+    throw error;
+  }
+
+  for (const { pattern, reason } of DEPRECATED_CONFIG_SECTIONS) {
+    if (pattern.test(contents)) {
+      problems.push(`config.toml: ${reason}`);
+    }
+  }
+
+  for (const key of BYTE_SIZED_KEYS) {
+    const match = new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"`, 'm').exec(contents);
+    if (!match) continue;
+
+    const value = match[1];
+    // Un entero desnudo son bytes y siempre vale; el problema es solo el sufijo.
+    if (/^\d+$/.test(value)) continue;
+
+    if (VALID_SIZE_SUFFIXES.test(value)) {
+      warnings.push(
+        `config.toml: ${key} = "${value}" depende de que la CLI acepte ese sufijo; ` +
+          'un entero en bytes no puede dejar de funcionar',
+      );
+    } else {
+      problems.push(
+        `config.toml: ${key} = "${value}" no es un número de bytes ni un tamaño que la CLI acepte ` +
+          '(la CLI 2.118.0 rechaza sufijos IEC como "Mi" con `invalid suffix`)',
+      );
+    }
+  }
+};
+
+await checkConfig();
 
 if (problems.length > 0) {
   for (const problem of problems) console.error(`✖ ${problem}`);

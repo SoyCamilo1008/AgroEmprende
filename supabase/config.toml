@@ -46,7 +46,11 @@ port = 54324
 
 [storage]
 enabled = true
-file_size_limit = "25Mi"
+# `26214400` son 25 MiB en bytes. La CLI 2.118.0 rechaza los sufijos tipo "25Mi"
+# ("invalid suffix: 'mi'") y ese error aparece al VALIDAR la config, antes de
+# mirar Docker: por eso `supabase start` moría en un segundo y parecía un
+# problema de contenedores cuando en realidad la configuración nunca cargó.
+file_size_limit = "26214400"
 
 [auth]
 enabled = true
