@@ -68,12 +68,25 @@ jobs:
   migrations:
     name: Migraciones aplicables
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     # `hashFiles()` no existe en un `if` a nivel de job (solo en el de un step),
     # así que esta condición no se puede evaluar aquí: GitHub rechazaba todo el
     # workflow y ningún job corría. Desde la Fase 2 el directorio siempre existe;
     # si alguna vez dejara de existir, `db:reset` fallaría, que es la señal justa.
+    #
+    # Este job es el ÚNICO lugar donde las migraciones se ejecutan contra un
+    # PostgreSQL real. Nada de lo demás (`pnpm check`) toca la base: una
+    # migración con un error de sintaxis, un `depends_on` mal puesto o una
+    # política de RLS que deja pasar de más pasaría todos los controles estáticos
+    # y llegaría a `main` rota. Por eso el job no se puede marcar como opcional.
+
+    services: {}
+
+    env:
+      # `supabase start` decide el directorio del proyecto subiendo desde el cwd.
+      # Fijarlo hace que el job no dependa de dónde se invoque.
+      SUPABASE_WORKDIR: ${{ github.workspace }}
 
     steps:
       - uses: actions/checkout@v4
@@ -89,21 +102,34 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Levantar Supabase local
+      # `ubuntu-latest` trae Docker instalado, pero eso es un detalle del proveedor
+      # de runners, no una garantía del workflow. Declararlo aquí convierte
+      # "el runner no trae Docker" en un fallo con un mensaje claro en vez de un
+      # error de la CLI que dice "command not found" y no dice de qué.
+      - name: Verificar Docker
+        uses: docker/setup-docker-action@v4
+
+      - name: Verificar que el daemon de Docker responde
         run: |
-          # Este job es el único lugar donde las migraciones se ejecutan de verdad:
-          # `supabase start` exige Docker, que no se puede asumir en la máquina de
-          # quien desarrolla. Por eso la Fase 2 no está verificada hasta que este
-          # job pasa en verde.
-          #
-          # Por el SCRIPT, no por `supabase` a secas: la CLI es una devDependency
-          # del repositorio, y un `run:` no hereda el `node_modules/.bin` que arma
-          # pnpm. Invocado en crudo, el runner responde "command not found" y el
-          # job muere antes de levantar nada.
-          pnpm db:start
-          # `db reset` aplica TODAS las migraciones desde cero y carga el seed: es la
-          # única forma de detectar una migración que depende de otra en mal orden.
-          pnpm db:reset
+          set -euo pipefail
+          docker version
+          docker info --format 'Docker {{.ServerVersion}} · {{.OperatingSystem}}'
+
+      # Un step propio, y no medio paso combinado, por un motivo concreto: cuando
+      # el CI moría en 1 segundo con `supabase start` y `supabase db reset` en el
+      # mismo `run:`, el log tenía que aclarar cuál de los dos era. Con un step por
+      # comando, la interfaz dice exactamente cuál falló, sin abrir el log.
+      #
+      # `pnpm db:start` y no `supabase` en crudo: la CLI es una devDependency del
+      # repositorio y un `run:` no hereda el `node_modules/.bin` que arma pnpm.
+      # Invocada en crudo, el runner responde "command not found".
+      - name: Levantar los contenedores de Supabase
+        run: pnpm db:start
+
+      # `db reset` aplica TODAS las migraciones desde cero y carga el seed: es la
+      # única forma de detectar una migración que depende de otra en mal orden.
+      - name: Aplicar migraciones desde cero
+        run: pnpm db:reset
 
       - name: Analizar el esquema resultante
         run: pnpm db:lint
@@ -112,3 +138,9 @@ jobs:
       # verde: `db lint` valida sintaxis, no aislamiento entre inquilinos.
       - name: Pruebas de base de datos
         run: pnpm db:test
+
+      # Un contenedor de más no cuesta casi nada, y un log de la base cuando algo
+      # va mal vale más que el mensaje de error de la CLI.
+      - name: Logs de la base de datos si algo falló
+        if: failure()
+        run: docker compose -f supabase/docker-compose.yml logs --tail 200 || true
