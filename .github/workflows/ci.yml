@@ -150,8 +150,21 @@ jobs:
             echo "SALIDA COMPLETA DE SUPABASE START ↓↓↓" >>"$GITHUB_STEP_SUMMARY"
             cat "$log" >>"$GITHUB_STEP_SUMMARY"
 
-            step_summary="$(grep -aoE '^(ERROR|WARN|FATAL)[^$]{0,700}' "$log" | tail -n 1)"
+            # `ERROR: syntax error at end of input` no dice QUÉ se cortó: el
+            # detalle viene en las líneas siguientes (`LINE n:`, `SQL:`), y sin
+            # ellas el error es inutilizable. Se emiten juntas, en una sola
+            # anotación y en una línea, porque el detalle se pierde si cada línea
+            # viaja por separado.
+            step_summary="$(
+              grep -a -m1 -A 6 -E '^(ERROR|FATAL)' "$log" \
+                | tr '\n' '|' | tr -s ' ' | cut -c1-1000
+            )"
             [ -n "$step_summary" ] || step_summary="$(tail -n 1 "$log")"
+
+            # Dónde se quedó: sin esto no se sabe si el fallo está en una
+            # migración o en el seed, porque la numeración de "Applying
+            # migration" del log no es de fiar.
+            progress="$(grep -a 'Applying migration\|Seeded\|Running seed\|Resetting' "$log" | tail -n 1 | cut -c1-160)"
 
             {
               echo "::error::\`pnpm db:start\` (\`supabase start\`) salió con código $status"
@@ -159,8 +172,8 @@ jobs:
               echo "::error::entorno · node $(node --version)"
               echo "::error::entorno · docker $(docker version --format '{{.Server.Version}}' 2>&1 | head -1)"
               echo "::error::entorno · disco libre $(df -h / | tail -1 | awk '{print $4}')"
-              echo "::error::--- salida de supabase start ---"
-              echo "::error::$step_summary"
+              echo "::error::avance · $progress"
+              echo "::error::detalle · $step_summary"
             } >&2
             exit "$status"
           fi
