@@ -240,6 +240,7 @@ declare
   v_amount numeric(18, 2);
   v_debits numeric(18, 2) := 0;
   v_credits numeric(18, 2) := 0;
+  v_lines jsonb;
 begin
   if v_user_id is null then
     raise exception 'Se requiere una sesión activa' using errcode = '28000';
@@ -260,6 +261,24 @@ begin
     raise exception 'Un asiento necesita al menos una línea' using errcode = '22023';
   end if;
 
+  -- Los llamadores arman el array con `case when ... then jsonb_build_object(...) end`,
+  -- y un `case` sin `else` devuelve NULL cuando la rama no aplica. `jsonb_build_array`
+  -- NO omite esos NULL: los mete como `null` de JSON, que al iterarlo llega aquí con
+  -- `->> 'account_code'` en NULL y revienta con «Cuenta base no encontrada: <NULL>».
+  -- Por eso el array se depura en un único lugar, en vez de en cada llamador: las
+  -- líneas que no aplican se descartan y el asiento se arma con las que sí.
+  v_lines := (
+    select coalesce(jsonb_agg(e), '[]'::jsonb)
+    from jsonb_array_elements(p_lines) e
+    where e is not null and e <> 'null'::jsonb
+  );
+
+  -- Con el filtro anterior el array puede quedar vacío aunque `p_lines` tuviera
+  -- longitud: un asiento sin líneas pasaría el balance 0 = 0 como si fuera válido.
+  if jsonb_array_length(v_lines) = 0 then
+    raise exception 'Un asiento necesita al menos una línea' using errcode = '22023';
+  end if;
+
   insert into finance.ledger_entries (
     organization_id, business_unit_id, entry_date, entry_type,
     source_type, source_id, description, created_by
@@ -270,7 +289,7 @@ begin
   )
   returning id into v_entry_id;
 
-  for v_line in select * from jsonb_array_elements(p_lines) loop
+  for v_line in select * from jsonb_array_elements(v_lines) loop
     v_side := v_line ->> 'side';
     v_amount := (v_line ->> 'amount')::numeric(18, 2);
     v_account_id := private.get_account(v_line ->> 'account_code');

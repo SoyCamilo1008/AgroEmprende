@@ -326,8 +326,11 @@ begin
     raise exception 'No hay deuda abierta a la que aplicar el pago' using errcode = '22023';
   end if;
 
-  -- Contra-partida del pago. El array de líneas se construye con `case` que
-  -- devuelve NULL cuando el tramo no existe: `jsonb_build_array` omite NULLs.
+  -- Contra-partida del pago. El array se arma con `case` para que el tramo que no
+  -- aplica no se escriba, y `post_ledger_entry` descarta esos NULL. Ojo: aquí el
+  -- comentario que decía que `jsonb_build_array` los omitía era falso, los mete
+  -- como `null` de JSON, y un pago que aplicara todo fallaba con
+  -- «Cuenta base no encontrada: <NULL>». Si un día esto se mueve, esa es la trampa.
   if p_direction = 'inbound' then
     perform private.post_ledger_entry(
       p_business_unit_id, p_payment_date, 'payment', 'finance.payments', v_payment_id, p_description,

@@ -138,9 +138,15 @@ begin
   -- El plan de cuentas: el MISMO código en las dos granjas, porque `code` es
   -- único por organización. Es lo que hace indistinguibles a simple vista una
   -- referencia cruzada y una correcta.
+  --
+  -- `on conflict` porque `create_organization_with_business_unit` ya copia las
+  -- plantillas del plan de cuentas a cada organización nueva: el 1105 de cada
+  -- granja llega por ahí, y sin esto este test reventaba por duplicado. Que el
+  -- código exista en las dos es justo lo que se quiere comprobar.
   insert into core.accounts (organization_id, code, name, type) values
     (v_org_a, '1105', 'Caja', 'asset'),
-    (v_org_b, '1105', 'Caja', 'asset');
+    (v_org_b, '1105', 'Caja', 'asset')
+  on conflict (organization_id, code) do nothing;
 
   insert into tests.ti (key, value) values
     ('owner_a', v_owner_a),
