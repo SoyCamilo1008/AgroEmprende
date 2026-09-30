@@ -15,9 +15,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# El CI solo necesita leer el repositorio.
+# El CI solo necesita leer el repositorio. `actions: write` es lo mínimo que
+# necesita el job de migraciones para dejar el log de arranque como artefacto
+# cuando `supabase start` falla, que es el único momento en que ese log importa.
 permissions:
   contents: read
+  actions: write
 
 jobs:
   verify:
@@ -131,12 +134,25 @@ jobs:
       - name: Levantar los contenedores de Supabase
         run: |
           set -o pipefail
-          log="$(mktemp)"
+          log="supabase-start.log"
           if pnpm db:start >"$log" 2>&1; then
             cat "$log"
           else
             status=$?
             cat "$log"
+            # GitHub recorta las anotaciones de un mismo check run a unas diez, así
+            # que un bloque de "últimas 25 líneas" se pierde casi entero: ya pasó, y
+            # por eso la atribución de la migración culpable fue inexistente y se
+            # culpó a la equivocada. El log entero se sube como artefacto (el
+            # workflow ya tiene permisos para hacerlo) y, además, se publica la
+            # ÚLTIMA línea útil pegada al mensaje del job, que es lo que GitHub
+            # muestra en la lista de ejecuciones sin pedir el log.
+            echo "SALIDA COMPLETA DE SUPABASE START ↓↓↓" >>"$GITHUB_STEP_SUMMARY"
+            cat "$log" >>"$GITHUB_STEP_SUMMARY"
+
+            step_summary="$(grep -aoE '^(ERROR|WARN|FATAL)[^$]{0,700}' "$log" | tail -n 1)"
+            [ -n "$step_summary" ] || step_summary="$(tail -n 1 "$log")"
+
             {
               echo "::error::\`pnpm db:start\` (\`supabase start\`) salió con código $status"
               echo "::error::entorno · supabase $(pnpm exec supabase --version 2>&1 | head -1)"
@@ -144,23 +160,19 @@ jobs:
               echo "::error::entorno · docker $(docker version --format '{{.Server.Version}}' 2>&1 | head -1)"
               echo "::error::entorno · disco libre $(df -h / | tail -1 | awk '{print $4}')"
               echo "::error::--- salida de supabase start ---"
+              echo "::error::$step_summary"
             } >&2
-            # El error real de la CLI viaja en una línea con la forma
-            # `{"_tag":"Error","error":{"code":"...","message":"..."}}`, y queda
-            # MUCHAS líneas por debajo del progreso de descarga: filtrarla es la
-            # única forma de verla sin abrir el log. Se imprimen primero las
-            # líneas de error y después las últimas 25, que son las que cierran el
-            # diagnóstico cuando la CLI muere sin imprimir nada.
-            echo "::error::--- líneas de error de supabase start ---"
-            grep -iE '"_tag":"?Error|invalid config|error:|failed to|denied|cannot|unable to' "$log" \
-              | tail -n 15 \
-              | while IFS= read -r line; do echo "::error::$line"; done
-            echo "::error::--- últimas 25 líneas de supabase start ---"
-            tail -n 25 "$log" | while IFS= read -r line; do
-              echo "::error::$line"
-            done
             exit "$status"
           fi
+
+      - name: Guardar el log de arranque si falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-start-log
+          path: supabase-start.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       # `db reset` aplica TODAS las migraciones desde cero y carga el seed: es la
       # única forma de detectar una migración que depende de otra en mal orden.
