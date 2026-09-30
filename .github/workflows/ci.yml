@@ -123,8 +123,33 @@ jobs:
       # `pnpm db:start` y no `supabase` en crudo: la CLI es una devDependency del
       # repositorio y un `run:` no hereda el `node_modules/.bin` que arma pnpm.
       # Invocada en crudo, el runner responde "command not found".
+      #
+      # El fallo se reemite como ANOTACIÓN, no solo como log. La API de logs de
+      # GitHub exige autenticación, así que un fallo abandonado en el log es un
+      # `failure` sin explicación para cualquiera que no tenga `gh` autenticado.
+      # La anotación se lee sin credenciales y dice qué falta.
       - name: Levantar los contenedores de Supabase
-        run: pnpm db:start
+        run: |
+          set -o pipefail
+          log="$(mktemp)"
+          if pnpm db:start >"$log" 2>&1; then
+            cat "$log"
+          else
+            status=$?
+            cat "$log"
+            {
+              echo "::error::\`pnpm db:start\` (\`supabase start\`) salió con código $status"
+              echo "::error::entorno · supabase $(pnpm exec supabase --version 2>&1 | head -1)"
+              echo "::error::entorno · node $(node --version)"
+              echo "::error::entorno · docker $(docker version --format '{{.Server.Version}}' 2>&1 | head -1)"
+              echo "::error::entorno · disco libre $(df -h / | tail -1 | awk '{print $4}')"
+              echo "::error::--- salida de supabase start ---"
+            } >&2
+            tail -n 40 "$log" | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit "$status"
+          fi
 
       # `db reset` aplica TODAS las migraciones desde cero y carga el seed: es la
       # única forma de detectar una migración que depende de otra en mal orden.
