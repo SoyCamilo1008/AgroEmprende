@@ -137,7 +137,7 @@ create table finance.ledger_lines (
   -- Una línea mueve UNA cuenta hacia UN lado: débito o crédito, no los dos a la
   -- vez. La forma "débito y crédito en la misma línea" es cómo nacen los
   -- asientos que no cuadran.
-  check (debit > 0) <> (credit > 0),
+  check ((debit > 0) <> (credit > 0)),
   -- La cuenta es del plan de cuentas DE ESTA organización; con una FK por `id`
   -- sola, una línea podía apuntar a la cuenta de otra granja y ser ilegible
   -- pero no inválida (docs/architecture/rls.md).
