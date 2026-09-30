@@ -211,14 +211,19 @@ jobs:
             status=$?
             cat "$log"
             cat "$log" >>"$GITHUB_STEP_SUMMARY"
-            # pgTAP reporta una línea `not ok N - ...` por prueba fallida, y a
-            # veces una `ERROR:` que aborta la suite entera. Se emiten juntas y
-            # en una línea, porque separadas se pierde el contexto.
+            # La CLI colorea la salida, así que una línea puede empezar por un
+            # código de escape y el `not ok` no queda al principio: se quitan los
+            # códigos antes de buscar, y se compara sin anclar al inicio de línea.
+            clean="$(sed -e 's/\x1b\[[0-9;]*m//g' "$log")"
             failed="$(
-              grep -aE '^\s*(not ok|[0-9]+\.\.|ERROR:|FATAL)' "$log" \
-                | tr '\n' '|' | tr -s ' ' | cut -c1-1400
+              printf '%s\n' "$clean" \
+                | grep -aE 'not ok|ERROR|FATAL|Tests failed|test result|error' \
+                | tail -n 20 | tr '\n' '|' | tr -s ' ' | cut -c1-1400
             )"
-            [ -n "$failed" ] || failed="$(tail -n 1 "$log")"
+            # Si nada coincide, el log no tiene la forma esperada y las últimas
+            # líneas son mejor pista que un mensaje vacío.
+            [ -n "$failed" ] \
+              || failed="$(printf '%s\n' "$clean" | tail -n 20 | tr '\n' '|' | cut -c1-1400)"
             echo "::error::pruebas de base de datos · $failed" >&2
             exit "$status"
           fi
