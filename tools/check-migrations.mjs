@@ -7,6 +7,7 @@
  *  3. Todo archivo declara su dependencia con `-- depends_on:` si existe.
  *  4. No hay sentencias prohibidas en una migración de esquema.
  *  5. `supabase/config.toml` no usa secciones ni valores que la CLI rechace.
+ *  6. Una función no acepta un valor que el CHECK de su tabla no permita.
  *
  * Se ejecuta en local y en CI: `pnpm tooling:check-migrations`
  */
@@ -53,6 +54,16 @@ const listFiles = async (dir) => {
  */
 const stripCommentsAndStrings = (sql) =>
   sql.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, "''");
+
+/**
+ * Como `stripCommentsAndStrings`, pero CONSERVA los literales.
+ *
+ * La regla 6 compara los valores de una lista contra otra, y para eso necesita
+ * leer `'cash'` y compañía. Un `--` dentro de un literal la dejaría incompleta,
+ * pero en estas migraciones los literales no llevan `--`; el análisis de las
+ * reglas 1-5 sigue usando la versión que sí los borra.
+ */
+const stripComments = (sql) => sql.replace(/--[^\n]*/g, ' ');
 
 const lineOf = (sql, index) => sql.slice(0, index).split('\n').length;
 
@@ -114,6 +125,12 @@ if (files.length === 0) {
 
 const seenTimestamps = new Map();
 
+const valuesOf = (list) =>
+  list
+    .split(',')
+    .map((part) => part.trim().replace(/^'|'$/g, ''))
+    .filter(Boolean);
+
 for (const file of files) {
   const match = FILE_NAME_PATTERN.exec(file);
   if (!match) {
@@ -147,6 +164,7 @@ for (const file of files) {
   // ───────────────────────────────────────────────────────────────────────────
 
   const code = stripCommentsAndStrings(contents);
+  const withLiterals = stripComments(contents);
 
   for (const check of findCheckConstraints(code)) {
     if (!check.closed) {
@@ -165,6 +183,45 @@ for (const file of files) {
           'Si el invariante necesita leer otra tabla, decláralo como un trigger ' +
           'de restricción diferido.',
       );
+    }
+  }
+
+  // ── Regla 6: qué valores admite cada TABLA ──
+  //
+  // Se recorre por tabla y no por archivo. Con el archivo entero el bug real
+  // pasaba: `finance.investments` sí admitía `credit`, y su CHECK tapaba que a
+  // `finance.expenses` le faltaba. Solo al atribuir cada CHECK a su tabla se ve
+  // que a una le falta y a la otra no.
+  //
+  // Va sobre `withLiterals` y no sobre `code`: en `code` los literales ya son
+  // `''` y la lista de valores sale vacía.
+  const tableChecks = new Map();
+  const createTableMarks = [];
+  const createTablePattern = /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?([a-z_][a-z0-9_.]*)/gi;
+  let createTable;
+  while ((createTable = createTablePattern.exec(withLiterals)) !== null) {
+    createTableMarks.push({
+      name: createTable[1].split('.').pop().toLowerCase(),
+      start: createTable.index,
+    });
+  }
+
+  for (let i = 0; i < createTableMarks.length; i++) {
+    const end =
+      i + 1 < createTableMarks.length ? createTableMarks[i + 1].start : withLiterals.length;
+    const segment = withLiterals.slice(createTableMarks[i].start, end);
+
+    for (const check of findCheckConstraints(segment)) {
+      const inList = /\b([a-z_][a-z0-9_]*)\s+in\s*\(([^()]*)\)/i.exec(check.body);
+      if (!inList) continue;
+      if (!tableChecks.has(createTableMarks[i].name)) {
+        tableChecks.set(createTableMarks[i].name, new Map());
+      }
+      const columns = tableChecks.get(createTableMarks[i].name);
+      if (!columns.has(inList[1].toLowerCase())) columns.set(inList[1].toLowerCase(), new Set());
+      for (const value of valuesOf(inList[2])) {
+        columns.get(inList[1].toLowerCase()).add(value);
+      }
     }
   }
 
@@ -207,6 +264,59 @@ for (const file of files) {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Regla 6: una función no puede aceptar un valor que el CHECK de la tabla en la
+  // que escribe no permita.
+  //
+  // `create_expense` y `create_investment` aceptaban `credit` y lo usaban para
+  // decidir si abonaban caja o levantaban un pagable, pero el CHECK de la tabla
+  // no lo incluía. La función validaba, insertaba, y la tabla botaba la fila: un
+  // gasto a crédito era imposible de registrar y la rama del pagable no se podía
+  // ni alcanzar. Ninguna de las dos piezas estaba mal por sí sola, por eso no se
+  // veía leyendo el archivo.
+  //
+  // Se empareja cada función con la tabla de su PRIMER `insert into`. Límite
+  // conocido: una función que escriba varias columnas de dominio en tablas
+  // distintas solo se contrasta contra la primera. Para lo que esta regla busca,
+  // que el valor no se pueda guardar, alcanza.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const functionMarks = [];
+  const functionPattern = /\bcreate\s+or\s+replace\s+function\s+([a-z_][a-z0-9_.]*)\s*\(/gi;
+  let functionMark;
+  while ((functionMark = functionPattern.exec(withLiterals)) !== null) {
+    functionMarks.push({ name: functionMark[1], start: functionMark.index });
+  }
+
+  for (let i = 0; i < functionMarks.length; i++) {
+    const end = i + 1 < functionMarks.length ? functionMarks[i + 1].start : withLiterals.length;
+    const segment = withLiterals.slice(functionMarks[i].start, end);
+
+    const insert = /\binsert\s+into\s+([a-z_][a-z0-9_.]*)/i.exec(segment);
+    if (!insert) continue;
+
+    const checks = tableChecks.get(insert[1].split('.').pop().toLowerCase());
+    if (!checks) continue;
+
+    const guardPattern = /\bp_([a-z_][a-z0-9_]*)\s+not\s+in\s*\(([^()]*)\)/gi;
+    let guard;
+    while ((guard = guardPattern.exec(segment)) !== null) {
+      const allowed = checks.get(guard[1].toLowerCase());
+      if (!allowed) continue;
+
+      for (const value of valuesOf(guard[2])) {
+        if (allowed.has(value)) continue;
+        problems.push(
+          `${file}: ${functionMarks[i].name} acepta ${guard[1]} = '${value}', ` +
+            `pero el CHECK de ${insert[1]} no lo permite. ` +
+            `La función valida el valor y ` +
+            `la tabla lo rechaza después: agrega '${value}' al CHECK o ` +
+            'quítalo de la lista de la función.',
+        );
+      }
+    }
+  }
+
   if (!/^--\s*description:/m.test(contents)) {
     warnings.push(`${file}: falta la cabecera "-- description: ..."`);
   }
@@ -215,8 +325,6 @@ for (const file of files) {
     warnings.push(`${file}: nombre demasiado corto para ser descriptivo`);
   }
 }
-
-for (const warning of warnings) console.warn(`⚠ ${warning}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // config.toml
