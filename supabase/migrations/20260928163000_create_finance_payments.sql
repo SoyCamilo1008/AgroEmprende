@@ -59,16 +59,70 @@ create table finance.payments (
 );
 
 -- El total del pago es exactamente la suma de sus asignaciones más el sobrante.
--- Se agrega con ALTER porque el CHECK referencia `payment_allocations`, que ya
--- debe existir cuando se crea la tabla.
-alter table finance.payments add constraint payments_allocations_coherent
-  check (
-    amount = unapplied_amount + coalesce((
-      select sum(a.amount)
-      from finance.payment_allocations a
-      where a.payment_id = id
-    ), 0)
-  );
+--
+-- NO puede ser un `check` de tabla: PostgreSQL rechaza las subconsultas dentro de
+-- un CHECK (`cannot use subquery in check constraint`), y este invariante necesita
+-- leer `payment_allocations`. Se declara como trigger de restricción DIFERIDO, el
+-- mismo patrón que el balance del libro mayor: la suma solo tiene sentido al
+-- cerrar la transacción, porque las asignaciones llegan de una en una.
+create or replace function private.assert_payment_allocations_coherent()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  -- Por `TG_OP`, no por `coalesce(new.payment_id, old.payment_id)`: en PL/pgSQL
+  -- `NEW` NO está asignado en un DELETE y desreferenciarlo aborta la sentencia con
+  -- `record "new" is not assigned yet` en vez de comprobar el invariante.
+  v_payment_id uuid := case
+    when tg_op = 'DELETE' then old.payment_id
+    else new.payment_id
+  end;
+  v_amount numeric(18, 2);
+  v_unapplied numeric(18, 2);
+  v_allocated numeric(18, 2);
+begin
+  select p.amount, p.unapplied_amount
+  into v_amount, v_unapplied
+  from finance.payments p
+  where p.id = v_payment_id;
+
+  -- El pago desaparece en la misma transacción (borrado en cascada de su
+  -- organización): no hay nada que armonizar.
+  if not found then
+    return null;
+  end if;
+
+  select coalesce(sum(a.amount), 0)
+  into v_allocated
+  from finance.payment_allocations a
+  where a.payment_id = v_payment_id;
+
+  if v_amount <> v_unapplied + v_allocated then
+    raise exception
+      'El pago % no es coherente: total %, sobrante %, asignaciones %',
+      v_payment_id, v_amount, v_unapplied, v_allocated
+      using errcode = '22023';
+  end if;
+
+  return null;
+end;
+$$;
+
+-- Se dispara desde las DOS tablas: cambiar el sobrante rompe la suma igual que
+-- agregar una asignación. Diferido para que la cuenta cierre al final.
+create constraint trigger payments_allocations_coherent
+  after insert or update or delete on finance.payments
+  deferrable initially deferred
+  for each row execute function private.assert_payment_allocations_coherent();
+
+create constraint trigger payment_allocations_coherent
+  after insert or update or delete on finance.payment_allocations
+  deferrable initially deferred
+  for each row execute function private.assert_payment_allocations_coherent();
+
+comment on constraint payments_allocations_coherent on finance.payments is
+  'Al cerrar la transacción, el total del pago es la suma de sus asignaciones más el sobrante.';
 
 create index payments_period on finance.payments (organization_id, payment_date, direction);
 

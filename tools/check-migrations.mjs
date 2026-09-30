@@ -45,6 +45,66 @@ const listFiles = async (dir) => {
   }
 };
 
+/**
+ * Deja solo el código: sin comentarios de línea ni literales de cadena.
+ *
+ * Sin esto, un CHECK con subconsulta escrito dentro de un comentario se
+ * reportaría como error, y un `check` de RLS se confundiría con uno de tabla.
+ */
+const stripCommentsAndStrings = (sql) =>
+  sql.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, "''");
+
+const lineOf = (sql, index) => sql.slice(0, index).split('\n').length;
+
+/**
+ * Devuelve cada expresión `check (...)` con sus paréntesis balanceados.
+ *
+ * Se cuentan los paréntesis porque un CHECK puede ocupar varias líneas y anidar
+ * paréntesis: sin contarlos, `check (a in (1, 2))` se cortaría por la mitad.
+ */
+const findCheckConstraints = (sql) => {
+  const found = [];
+  const pattern = /\bcheck\s*\(/gi;
+  let match;
+
+  while ((match = pattern.exec(sql)) !== null) {
+    // `with check (...)` es una política RLS, no un CHECK de tabla: ahí las
+    // subconsultas son legales y esperadas.
+    const before = sql.slice(Math.max(0, match.index - 5), match.index);
+    if (/\bwith\s+$/i.test(before)) continue;
+
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let end = -1;
+
+    for (let i = open; i < sql.length; i++) {
+      if (sql[i] === '(') depth++;
+      else if (sql[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+
+    if (end === -1) {
+      found.push({ text: sql.slice(match.index), line: lineOf(sql, match.index), closed: false });
+      continue;
+    }
+
+    found.push({
+      text: sql.slice(match.index, end + 1),
+      line: lineOf(sql, match.index),
+      closed: true,
+      body: sql.slice(open + 1, end),
+    });
+    pattern.lastIndex = end;
+  }
+
+  return found;
+};
+
 const files = (await listFiles(MIGRATIONS_DIR)).filter((file) => file.endsWith('.sql')).sort();
 
 if (files.length === 0) {
@@ -78,6 +138,47 @@ for (const file of files) {
     if (pattern.test(contents)) {
       problems.push(`${file}: ${reason}`);
     }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Los dos errores que costaron un ciclo entero de CI cada uno. Ninguno se ve
+  // leyendo la migración: hay que ejecutarla, y la única máquina que la ejecuta
+  // es el job de PostgreSQL del CI. Se comprueban aquí, en local y en un segundo.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const code = stripCommentsAndStrings(contents);
+
+  for (const check of findCheckConstraints(code)) {
+    if (!check.closed) {
+      problems.push(`${file}:${check.line}: el CHECK no cierra sus paréntesis`);
+      continue;
+    }
+
+    // PostgreSQL rechaza las subconsultas dentro de un CHECK de tabla
+    // (`cannot use subquery in check constraint`), así que un invariante que
+    // necesita leer otra tabla tiene que ser un trigger de restricción
+    // diferido, no un CHECK. Esto ya rompió `finance.payments`.
+    if (/\bselect\b/i.test(check.body) || /\bexists\b/i.test(check.body)) {
+      problems.push(
+        `${file}:${check.line}: un CHECK no puede contener una subconsulta ` +
+          '(PostgreSQL: cannot use subquery in check constraint). ' +
+          'Si el invariante necesita leer otra tabla, decláralo como un trigger ' +
+          'de restricción diferido.',
+      );
+    }
+  }
+
+  // `check (debit > 0) <> (credit > 0)` se cierra en el primer `)` y deja el
+  // operador suelto: `syntax error at or near "<>"`. Comparar dos booleanos
+  // necesita el par exterior de paréntesis.
+  const danglingOperator = /\bcheck\s*\([^()]*\)\s*(<>|<|>|=|\band\b|\bor\b|\bis\b)\s*[(']/gi;
+  let dangling;
+  while ((dangling = danglingOperator.exec(code)) !== null) {
+    problems.push(
+      `${file}:${lineOf(code, dangling.index)}: \`${dangling[0].replace(/\s+/g, ' ')}\` ` +
+        'deja un operador sin operandos: envuelve la comparación completa, ' +
+        'por ejemplo `check ((a > 0) <> (b > 0))`.',
+    );
   }
 
   if (!/^--\s*description:/m.test(contents)) {

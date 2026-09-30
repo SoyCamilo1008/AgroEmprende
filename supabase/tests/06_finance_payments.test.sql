@@ -6,7 +6,7 @@
 
 begin;
 
-select plan(26);
+select plan(27);
 
 create schema if not exists tests;
 
@@ -409,6 +409,42 @@ select is(
   false,
   '25: una deuda parcial no se marca como pagada'
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- H. El invariante del pago: el total es la suma de asignaciones más el sobrante.
+--
+-- Este invariante se escribio primero como `check` de tabla y PostgreSQL lo
+-- rechazo (`cannot use subquery in check constraint`), porque necesita leer la
+-- tabla de asignaciones. Ahora es un trigger de restriccion diferido, igual que
+-- el balance del libro mayor. Se prueba con una escritura directa y como
+-- superusuario: si el rechazo lo diera el RLS o un GRANT, la prueba probaria
+-- algo distinto de lo que dice.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+reset role;
+set constraints all immediate;
+
+-- Agregar una asignacion de mas descuadra el pago. Solo puede fallar por el
+-- invariante: la fila cumple sus propios CHECK y no hay permisos que la frenen.
+select throws_ok(
+  $sql$
+    do $$
+    begin
+      insert into finance.payment_allocations (
+        organization_id, payment_id, allocation_type, allocation_id, amount
+      )
+      values (
+        tests.id('org_a'), (select payment_id from fin_p1), 'receivable',
+        gen_random_uuid(), 1
+      );
+    end $$;
+  $sql$,
+  '22023',
+  null,
+  '27: una asignacion que descuadra el pago es rechazada por el invariante'
+);
+
+set constraints all deferred;
 
 set local role anon;
 
