@@ -220,11 +220,17 @@ jobs:
                 | grep -aE 'not ok|ERROR|FATAL|Tests failed|test result|error' \
                 | tail -n 20 | tr '\n' '|' | tr -s ' ' | cut -c1-1400
             )"
-            # Si nada coincide, el log no tiene la forma esperada y las últimas
-            # líneas son mejor pista que un mensaje vacío.
-            [ -n "$failed" ] \
-              || failed="$(printf '%s\n' "$clean" | tail -n 20 | tr '\n' '|' | cut -c1-1400)"
-            echo "::error::pruebas de base de datos · $failed" >&2
+            echo "::error::pruebas de base de datos · ${failed:-sin coincidencias en el log}"
+
+            # El final del log va SIEMPRE, no solo cuando el grep no encuentra
+            # nada. Un fallo puede ser del propio contenedor y no tener una línea
+            # `not ok`: en ese caso el grep igual atrapa el texto que envuelve la
+            # CLI, y como hubo coincidencia el log real se quedaba sin enseñar.
+            # Dos anotaciones: una para el fallo y otra para el contexto.
+            tail="$(
+              printf '%s\n' "$clean" | tail -n 20 | tr '\n' '|' | tr -s ' ' | cut -c1-1400
+            )"
+            echo "::error::últimas líneas del log · $tail" >&2
             exit "$status"
           fi
 
