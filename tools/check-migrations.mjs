@@ -181,6 +181,32 @@ for (const file of files) {
     );
   }
 
+  // En PL/pgSQL, `if <expr> <> case when ... end then` es ambiguo: el parser se
+  // come el `then` del CASE como si cerrara el IF, el IF queda sin cerrar y la
+  // migración muere con `syntax error at end of input` sin señalar la línea. El
+  // CASE debe ir entre paréntesis: `if a <> (case when ... end) then`.
+  //
+  // El CASE suele estar partido en varias líneas, y el `(` que lo protege también
+  // puede estar en la línea anterior, así que se compara el texto con los saltos
+  // de línea normalizados en un espacio.
+  const flattened = code.replace(/\s+/g, ' ');
+  const unparenthesizedCase = /\bif\b[^;]*?\bcase\b[^;]*?\bend\s+then\b/gi;
+  let caseInIf;
+  while ((caseInIf = unparenthesizedCase.exec(flattened)) !== null) {
+    // Un CASE ya envuelto en paréntesis no es ambiguo, así que se busca el `(`
+    // que lo abre dentro del fragmento: si existe, la línea está bien.
+    const fragment = caseInIf[0];
+    const caseAt = fragment.search(/\bcase\b/i);
+    if (fragment.slice(0, caseAt).trimEnd().endsWith('(')) continue;
+
+    problems.push(
+      `${file}: \`if ... case ... end then\` es ambiguo en PL/pgSQL: el \`then\` ` +
+        'se atribuye al CASE y el IF queda sin cerrar ' +
+        '(\`syntax error at end of input\`). Envuelve el CASE: ' +
+        '`if x <> (case when ... end) then`.',
+    );
+  }
+
   if (!/^--\s*description:/m.test(contents)) {
     warnings.push(`${file}: falta la cabecera "-- description: ..."`);
   }

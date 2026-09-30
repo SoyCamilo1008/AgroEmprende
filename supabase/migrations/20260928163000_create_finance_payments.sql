@@ -177,8 +177,8 @@ $$;
 -- Registrar pago
 --
 -- p_assignments: JSON opcional para control fino
---   [{ "type": "receivable", "id": "<uuid>" }, ...]  (inbound)
---   [{ "type": "payable", "id": "<uuid>" }, ...]     (outbound)
+--   inbound  -> [{ "type": "receivable", "id": "<uuid-de-la-deuda>" }, ...]
+--   outbound -> [{ "type": "payable",    "id": "<uuid-de-la-deuda>" }, ...]
 -- Sin asignaciones, se aplica FIFO por vencimiento de la deuda abierta. El
 -- pago entrante entra por caja/bancos contra 1305 (aplicado) + 2210 (sobra);
 -- el saliente, 2105 + 1310 contra caja/bancos. UNA transacción.
@@ -248,7 +248,13 @@ begin
 
   if p_assignments is not null then
     for v_assignment in select * from jsonb_array_elements(p_assignments) loop
-      if (v_assignment ->> 'type') <> case when p_direction = 'inbound' then 'receivable' else 'payable' end then
+      -- El CASE va entre parentesis a proposito. Sin ellos, PL/pgSQL lee
+      -- `if a <> case when ... end then` y se come el `then` del CASE como si
+      -- cerrara el IF: el IF queda sin cerrar y la migracion muere con
+      -- `syntax error at end of input` sin senalar esta linea.
+      if (v_assignment ->> 'type') <> (
+        case when p_direction = 'inbound' then 'receivable' else 'payable' end
+      ) then
         raise exception 'Tipo de asignación inválido para un pago %: %',
           p_direction, v_assignment ->> 'type' using errcode = '22023';
       end if;
