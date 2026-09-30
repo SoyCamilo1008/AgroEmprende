@@ -71,17 +71,36 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  -- Por `TG_OP`, no por `coalesce(new.payment_id, old.payment_id)`: en PL/pgSQL
-  -- `NEW` NO está asignado en un DELETE y desreferenciarlo aborta la sentencia con
-  -- `record "new" is not assigned yet` en vez de comprobar el invariante.
-  v_payment_id uuid := case
-    when tg_op = 'DELETE' then old.payment_id
-    else new.payment_id
-  end;
+  -- Una sola función cubre DOS tablas y no llaman igual a la clave: en
+  -- `payments` es `id` y en `payment_allocations` es `payment_id`.
+  --
+  -- No se puede discriminar con `old.payment_id` / `new.payment_id` a secas,
+  -- porque al disparar desde `payments` esos campos no existen. Y tampoco
+  --Serving con un `case` que elija la columna: PL/pgSQL resuelve las referencias
+  -- a campos del registro al PLANIFICAR la expresión, no al evaluarla, así que
+  -- la rama muerta también revienta con
+  -- `record "old" has no field "payment_id"`. Se comprueba en PGlite.
+  --
+  -- La salida es no nombrar ningún campo: `to_jsonb` del registro completo y se
+  -- busca la clave que corresponda a la tabla. Una clave inexistente devuelve
+  -- NULL en vez de abortar la sentencia.
+  v_row jsonb;
+  v_key text;
+  v_payment_id uuid;
   v_amount numeric(18, 2);
   v_unapplied numeric(18, 2);
   v_allocated numeric(18, 2);
 begin
+  -- `OLD` no está asignado en un INSERT ni en un UPDATE, y desreferenciarlo
+  -- aborta con `record "old" is not assigned yet` en vez de comprobar nada.
+  if tg_op = 'DELETE' then
+    v_row := to_jsonb(old);
+  else
+    v_row := to_jsonb(new);
+  end if;
+
+  v_key := case when tg_table_name = 'payments' then 'id' else 'payment_id' end;
+  v_payment_id := (v_row ->> v_key)::uuid;
   select p.amount, p.unapplied_amount
   into v_amount, v_unapplied
   from finance.payments p
@@ -109,8 +128,12 @@ begin
 end;
 $$;
 
--- Se dispara desde las DOS tablas: cambiar el sobrante rompe la suma igual que
--- agregar una asignación. Diferido para que la cuenta cierre al final.
+  -- Se dispara desde las DOS tablas: cambiar el sobrante rompe la suma igual que
+  -- agregar una asignación. Diferido para que la cuenta cierre al final.
+  --
+  -- Y diferido significa que el error sale al final de la transacción, no al
+  -- insertar: por eso un fallo aquí se lee como si nada tuviera que ver con el
+  -- pago que lo disparó.
 create constraint trigger payments_allocations_coherent
   after insert or update or delete on finance.payments
   deferrable initially deferred
