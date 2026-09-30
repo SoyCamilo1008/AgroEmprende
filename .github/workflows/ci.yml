@@ -145,7 +145,18 @@ jobs:
               echo "::error::entorno · disco libre $(df -h / | tail -1 | awk '{print $4}')"
               echo "::error::--- salida de supabase start ---"
             } >&2
-            tail -n 40 "$log" | while IFS= read -r line; do
+            # El error real de la CLI viaja en una línea con la forma
+            # `{"_tag":"Error","error":{"code":"...","message":"..."}}`, y queda
+            # MUCHAS líneas por debajo del progreso de descarga: filtrarla es la
+            # única forma de verla sin abrir el log. Se imprimen primero las
+            # líneas de error y después las últimas 25, que son las que cierran el
+            # diagnóstico cuando la CLI muere sin imprimir nada.
+            echo "::error::--- líneas de error de supabase start ---"
+            grep -iE '"_tag":"?Error|invalid config|error:|failed to|denied|cannot|unable to' "$log" \
+              | tail -n 15 \
+              | while IFS= read -r line; do echo "::error::$line"; done
+            echo "::error::--- últimas 25 líneas de supabase start ---"
+            tail -n 25 "$log" | while IFS= read -r line; do
               echo "::error::$line"
             done
             exit "$status"
