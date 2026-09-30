@@ -197,8 +197,40 @@ jobs:
 
       # Sin esto, una política de RLS que deja pasar de más llegaría a `main` en
       # verde: `db lint` valida sintaxis, no aislamiento entre inquilinos.
+      #
+      # La salida se reemite como anotación por la misma razón que el arranque:
+      # la API de logs exige autenticación, así que un fallo de pgTAP sin
+      # anotación es un `failure` que no dice qué prueba falló ni por qué.
       - name: Pruebas de base de datos
-        run: pnpm db:test
+        run: |
+          set -o pipefail
+          log="pgtap.log"
+          if pnpm db:test >"$log" 2>&1; then
+            cat "$log"
+          else
+            status=$?
+            cat "$log"
+            cat "$log" >>"$GITHUB_STEP_SUMMARY"
+            # pgTAP reporta una línea `not ok N - ...` por prueba fallida, y a
+            # veces una `ERROR:` que aborta la suite entera. Se emiten juntas y
+            # en una línea, porque separadas se pierde el contexto.
+            failed="$(
+              grep -aE '^\s*(not ok|[0-9]+\.\.|ERROR:|FATAL)' "$log" \
+                | tr '\n' '|' | tr -s ' ' | cut -c1-1400
+            )"
+            [ -n "$failed" ] || failed="$(tail -n 1 "$log")"
+            echo "::error::pruebas de base de datos · $failed" >&2
+            exit "$status"
+          fi
+
+      - name: Guardar el log de las pruebas si fallaron
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pgtap-log
+          path: pgtap.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       # Un contenedor de más no cuesta casi nada, y un log de la base cuando algo
       # va mal vale más que el mensaje de error de la CLI.
