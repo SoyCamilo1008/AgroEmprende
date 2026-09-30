@@ -67,8 +67,12 @@ create table finance.expenses (
   expense_date date not null,
   description text check (description is null or char_length(btrim(description)) <= 400),
   amount numeric(18, 2) not null check (amount > 0),
+  -- `credit` es un valor admitido a propósito: significa "devengado y aún no
+  -- pagado", y es lo que `create_expense` guarda para el gasto que genera un
+  -- `finance.payables`. Sin él en esta lista, un gasto a crédito no se podía
+  -- registrar siquiera: la función lo aceptaba y la tabla lo rechazaba.
   payment_method text not null check (
-    payment_method in ('cash', 'bank_transfer', 'card', 'digital_wallet')
+    payment_method in ('cash', 'bank_transfer', 'card', 'digital_wallet', 'credit')
   ),
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
@@ -88,8 +92,10 @@ create table finance.investments (
   investment_date date not null,
   description text check (description is null or char_length(btrim(description)) <= 400),
   amount numeric(18, 2) not null check (amount > 0),
+  -- Igual que en `expenses`: `create_investment` acepta `credit` para la
+  -- inversión financiada, así que la columna tiene que poder guardarlo.
   payment_method text not null check (
-    payment_method in ('cash', 'bank_transfer', 'card', 'digital_wallet')
+    payment_method in ('cash', 'bank_transfer', 'card', 'digital_wallet', 'credit')
   ),
   created_by uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
