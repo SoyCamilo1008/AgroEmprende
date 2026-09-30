@@ -47,7 +47,10 @@ create table finance.payables (
   paid_amount numeric(18, 2) not null default 0 check (paid_amount between 0 and original_amount),
   paid_at timestamptz,
   created_at timestamptz not null default now(),
-  check ((paid_amount > 0) = (paid_at is not null)),
+  -- Misma regla que en `finance.receivables`: `paid_at` es la fecha de
+  -- liquidación, no la del primer abono, y una deuda de importe cero no tiene
+  -- fecha que registrar.
+  check ((paid_amount = original_amount and original_amount > 0) = (paid_at is not null)),
   foreign key (organization_id, business_unit_id)
     references core.business_units (organization_id, id) on delete cascade
 );

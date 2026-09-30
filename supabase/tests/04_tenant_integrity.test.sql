@@ -236,11 +236,15 @@ select is(
 -- 5-6. Jerarquía de cuentas: `accounts.parent_id`
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- El código es `110502` y no `1110` a propósito: `1110` es una plantilla, así
+-- que toda organización nueva ya la tiene y el INSERT moría por
+-- `unique (organization_id, code)` con 23505, sin llegar a comprobar la FK que
+-- esta aserción quiere probar.
 select throws_ok(
   $$ insert into core.accounts (organization_id, code, name, type, parent_id)
      values (
        (select tests.ti_id('org_a')),
-       '1110',
+       '110502',
        'Bancos',
        'asset',
        (select id from core.accounts where organization_id = tests.ti_id('org_b') and code = '1105')
@@ -378,8 +382,15 @@ select throws_ok(
   'no se puede borrar una cuenta que tiene cuentas colgando'
 );
 
+-- Se cuentan las dos cuentas del caso, no todas las de la organización: al
+-- crear la organización se copian las plantillas del plan de cuentas, así que
+-- `org_a` tiene unas 26 filas y un `count(*)` global nunca dio 2. Lo que esta
+-- aserción quiere decir es que el rechazo no se llevó por delante ni al padre ni
+-- a la hija, y para eso bastan sus dos códigos.
 select is(
-  (select count(*) from core.accounts where organization_id = tests.ti_id('org_a')),
+  (select count(*) from core.accounts
+    where organization_id = tests.ti_id('org_a')
+      and code in ('1105', '110501')),
   2::bigint,
   'y el rechazo no borró ni la cuenta ni su hija'
 );

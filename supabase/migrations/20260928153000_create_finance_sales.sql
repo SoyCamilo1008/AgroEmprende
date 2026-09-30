@@ -95,7 +95,13 @@ create table finance.receivables (
   paid_amount numeric(18, 2) not null default 0 check (paid_amount between 0 and original_amount),
   paid_at timestamptz,
   created_at timestamptz not null default now(),
-  check ((paid_amount > 0) = (paid_at is not null)),
+  -- `paid_at` marca la LIQUIDACIÓN de la deuda, no el primer abono: mientras
+  -- quede saldo la cartera sigue abierta y no hay fecha que registrar. La
+  -- condición era `paid_amount > 0`, que obligaba a fechar apenas entraba el
+  -- primer peso y hacía indistinguible una deuda tocada de una deuda saldada.
+  -- `original_amount > 0` aparte porque un importe de cero ya está liquidado de
+  -- entrada y no tiene fecha que registrar.
+  check ((paid_amount = original_amount and original_amount > 0) = (paid_at is not null)),
   unique (organization_id, sale_id),
   foreign key (organization_id, sale_id)
     references finance.sales (organization_id, id) on delete cascade

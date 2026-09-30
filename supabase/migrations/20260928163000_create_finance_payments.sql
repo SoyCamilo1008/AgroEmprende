@@ -182,15 +182,26 @@ begin
   set unapplied_amount = unapplied_amount - p_amount
   where id = p_payment_id and organization_id = p_organization_id;
 
+  -- `paid_at` es la fecha de LIQUIDACIÓN, no la de "hubo un pago". Un abono
+  -- parcial deja la deuda abierta y no fecha nada; solo se fecha cuando el saldo
+  -- llega a cero. En un `update` todos los lados derechos ven la fila anterior,
+  -- así que `paid_amount + p_amount >= original_amount` compara contra el saldo
+  -- de antes de aplicar este abono, que es justo lo que se quiere.
   if p_allocation_type = 'receivable' then
     update finance.receivables
     set paid_amount = paid_amount + p_amount,
-        paid_at = now()
+        paid_at = case
+          when paid_amount + p_amount >= original_amount then now()
+          else null
+        end
     where organization_id = p_organization_id and id = p_debt_id;
   else
     update finance.payables
     set paid_amount = paid_amount + p_amount,
-        paid_at = now()
+        paid_at = case
+          when paid_amount + p_amount >= original_amount then now()
+          else null
+        end
     where organization_id = p_organization_id and id = p_debt_id;
   end if;
 end;

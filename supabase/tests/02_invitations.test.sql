@@ -239,6 +239,18 @@ select throws_ok(
 
 select tests.inv_act_as(tests.inv_id('invitee'));
 
+-- Aceptar la invitación es lo que crea la membresía: sin esta llamada las
+-- aserciones de abajo no estarían probando el camino feliz, sino una membresía
+-- que nadie creó. Va en un `do` y no en un `select` suelto para no sumar una
+-- línea de TAP y descuadrar el `plan(16)`.
+do $$
+begin
+  perform public.accept_organization_invitation(
+    tests.inv_token_of('invitada@ejemplo.test')
+  );
+end;
+$$;
+
 select is(
   (select role_code from core.organization_members where user_id = tests.inv_id('invitee')),
   'operator',
