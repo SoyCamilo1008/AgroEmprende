@@ -305,13 +305,17 @@ select is(
   '13: un usuario de una sola organización resuelve sin cabecera (sin regresión)'
 );
 
-select tests.set_org_header(tests.id('org_c')::text);
+-- El GUC de la misma transacción tiene prioridad sobre la cabecera: es el caso
+-- de un `set` seguido de una escritura en la misma petición.
+perform set_config('app.current_organization_id', tests.id('org_b')::text, true);
 
 select is(
   (select private.current_organization_id()),
-  tests.id('org_a'),
+  tests.id('org_b'),
   '14: el GUC de la misma transacción tiene prioridad sobre la cabecera'
 );
+
+perform set_config('app.current_organization_id', '', true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Las organizaciones propias: la lectura que rompe el deadlock
@@ -379,7 +383,7 @@ select is(
 
 -- Sin sesión ni rol `authenticated` la lista se vacía en vez de fallar, como el
 -- resto de lecturas del catálogo.
-select set local role anon;
+set local role anon;
 select tests.clear_session();
 
 select is(
