@@ -39,6 +39,9 @@ export { MEASURE_UNITS } from './units';
 export type { BusinessUnit, BusinessUnitScope, BusinessUnitType } from './business-units';
 export { BUSINESS_UNIT_TYPES } from './business-units';
 
+export type { Customer, CustomerContact } from './customers';
+export { CREDIT_DAYS_MAX, CREDIT_DAYS_MIN } from './customers';
+
 export type { Permission, Role, RoleDefinition } from './auth';
 export { PERMISSIONS, ROLES } from './auth';
 

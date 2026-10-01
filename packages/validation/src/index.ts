@@ -5,6 +5,7 @@
  * Sus compras pertenecen a una unidad de negocio concreta, pero el cliente es
  * uno solo. Nunca se duplica por negocio.
  */
+import { CREDIT_DAYS_MAX, CREDIT_DAYS_MIN } from '@agroemprende/types';
 import { z } from 'zod';
 import {
   businessUnitCodeSchema,
@@ -17,24 +18,73 @@ import {
   uuidSchema,
 } from './common';
 
-export const CUSTOMER_TYPES = ['person', 'company', 'restaurant', 'market', 'other'] as const;
-export type CustomerType = (typeof CUSTOMER_TYPES)[number];
-
+/**
+ * Cliente de la organización: refleja `core.customers` campo por campo.
+ *
+ * No hay `type`, `documentType` ni `creditLimit` a propósito. Los dos primeros no
+ * existen en la base y son catálogos inventados: cada granja llama distinto a sus
+ * clientes y no hay fuente para ese enum. El tercero es peor que inventado, es
+ * contradictorio: la base maneja un PLAZO (`credit_days`), no un tope de cartera
+ * en pesos. Un formulario que ofrezca un límite en pesos construye un acuerdo
+ * comercial que nadie tomó.
+ *
+ * Las expresiones regulares y los rangos repiten los CHECK de la tabla para que
+ * el error llegue antes de gastar la ida al servidor.
+ */
 export const customerSchema = z.object({
   name: z.string().trim().min(2, 'El nombre es obligatorio').max(160),
-  type: z.enum(CUSTOMER_TYPES).default('person'),
-  documentType: z.enum(['cc', 'ce', 'nit', 'rut', 'other']).optional(),
-  documentNumber: z.string().trim().max(32).optional(),
+  /** Código interno de la granja, opcional y único por organización. */
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(
+      /^[A-Z0-9_-]{2,32}$/u,
+      'El código son de 2 a 32 caracteres: letras, números, guion o guion bajo',
+    )
+    .optional(),
+  /** NIT/NUI: solo dígitos, de 6 a 15. */
+  taxId: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6,15}$/u, 'El NIT son de 6 a 15 dígitos, sin guiones ni letras')
+    .optional(),
   email: emailSchema.optional().or(z.literal('').transform(() => undefined)),
   phone: phoneSchema.optional().or(z.literal('').transform(() => undefined)),
   address: z.string().trim().max(240).optional(),
-  /** Límite de crédito en pesos. NULL = sin límite. */
-  creditLimit: pesoAmountSchema.nullable().default(null),
+  /**
+   * Días de crédito acordados. `null` = no hay plazo acordado, que es distinto de
+   * `0` = se paga hoy. No se rellena con un valor por defecto: 30 días es una
+   * decisión comercial y ponerla cambia la cartera de todos los clientes.
+   */
+  creditDays: z.coerce
+    .number()
+    .int()
+    .min(CREDIT_DAYS_MIN)
+    .max(CREDIT_DAYS_MAX)
+    .nullable()
+    .default(null),
   notes: notesSchema,
   isActive: z.boolean().default(true),
 });
 
 export type CustomerInput = z.infer<typeof customerSchema>;
+
+/**
+ * Contacto del cliente: refleja `core.customer_contacts`. `role` es texto libre
+ * porque cada granja nombra distinto a esas personas.
+ */
+export const customerContactSchema = z.object({
+  customerId: uuidSchema,
+  name: z.string().trim().min(2, 'El nombre es obligatorio').max(160),
+  role: z.string().trim().min(2).max(80).optional(),
+  email: emailSchema.optional().or(z.literal('').transform(() => undefined)),
+  phone: phoneSchema.optional().or(z.literal('').transform(() => undefined)),
+  isPrimary: z.boolean().default(false),
+  notes: notesSchema,
+});
+
+export type CustomerContactInput = z.infer<typeof customerContactSchema>;
 
 /** Validación de una venta de productos (huevos, carne, otros). */
 export const saleItemSchema = z.object({

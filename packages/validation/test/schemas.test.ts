@@ -10,6 +10,7 @@ import {
   createExpenseSchemaRefined,
   createSaleSchema,
   createSaleSchemaRefined,
+  customerContactSchema,
   customerSchema,
   recordWaterConsumptionSchema,
 } from '../src/index';
@@ -85,6 +86,93 @@ describe('validación: clientes', () => {
 
   it('exige nombre', () => {
     expect(customerSchema.safeParse({ name: 'J' }).success).toBe(false);
+  });
+
+  it('no inventa un tipo de cliente que la base no tiene', () => {
+    // `core.customers` no tiene columna `type`. Aunque el tipo de entrada no
+    // compila si se lo pasa, en runtime la clave se descarta: lo que sale de
+    // aquí son columnas de la tabla y nada más.
+    const result = customerSchema.safeParse({ name: 'Juan Pérez', type: 'person' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty('type');
+    }
+  });
+
+  it('no ofrece un límite de crédito en pesos', () => {
+    // La base maneja un plazo (credit_days), no un tope de cartera. Aceptar el
+    // límite construiría un acuerdo comercial que nadie tomó.
+    const result = customerSchema.safeParse({ name: 'Juan Pérez', creditLimit: 5_000_000 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty('creditLimit');
+    }
+  });
+
+  it('acepta días de crédito acordados', () => {
+    const result = customerSchema.safeParse({ name: 'Juan Pérez', creditDays: 30 });
+    expect(result.success).toBe(true);
+  });
+
+  it('deja los días de crédito en null cuando no hay acuerdo', () => {
+    // null = no hay plazo. No se rellena con 30 por defecto: eso cambiaría la
+    // cartera de todos los clientes sin que nadie lo decidiera.
+    const result = customerSchema.safeParse({ name: 'Juan Pérez' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.creditDays).toBeNull();
+    }
+  });
+
+  it('distingue "se paga hoy" (0) de "no hay acuerdo" (null)', () => {
+    const result = customerSchema.safeParse({ name: 'Juan Pérez', creditDays: 0 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.creditDays).toBe(0);
+    }
+  });
+
+  it('rechaza un plazo que la tabla no permite', () => {
+    expect(customerSchema.safeParse({ name: 'Juan', creditDays: 400 }).success).toBe(false);
+    expect(customerSchema.safeParse({ name: 'Juan', creditDays: -1 }).success).toBe(false);
+    expect(customerSchema.safeParse({ name: 'Juan', creditDays: 12.5 }).success).toBe(false);
+  });
+
+  it('normaliza el código del cliente a mayúsculas', () => {
+    const result = customerSchema.safeParse({ name: 'Juan', code: 'cli-01' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.code).toBe('CLI-01');
+    }
+  });
+
+  it('rechaza un código con caracteres que la tabla no admite', () => {
+    expect(customerSchema.safeParse({ name: 'Juan', code: 'A' }).success).toBe(false);
+    expect(customerSchema.safeParse({ name: 'Juan', code: 'CLI 01' }).success).toBe(false);
+    expect(customerSchema.safeParse({ name: 'Juan', code: 'CLIÑ01' }).success).toBe(false);
+  });
+
+  it('exige un NIT de solo dígitos', () => {
+    expect(customerSchema.safeParse({ name: 'Juan', taxId: '900123456' }).success).toBe(true);
+    expect(customerSchema.safeParse({ name: 'Juan', taxId: '900-123-456' }).success).toBe(false);
+    expect(customerSchema.safeParse({ name: 'Juan', taxId: '12345' }).success).toBe(false);
+  });
+
+  it('acepta un contacto con su rol', () => {
+    const result = customerContactSchema.safeParse({
+      customerId: uuid,
+      name: 'María López',
+      role: 'Dueño de compra',
+      phone: '3101234567',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.isPrimary).toBe(false);
+    }
+  });
+
+  it('exige el cliente al que pertenece el contacto', () => {
+    expect(customerContactSchema.safeParse({ name: 'María López' }).success).toBe(false);
   });
 });
 
