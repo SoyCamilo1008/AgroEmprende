@@ -19,7 +19,7 @@
 
 begin;
 
-select plan(24);
+select plan(26);
 
 create schema if not exists tests;
 
@@ -379,7 +379,34 @@ select is(
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- F. El libro y la cartera cuentan lo mismo
+-- F. Una venta de contado no se cobra dos veces
+--
+-- El pago FIFO de `register_payment` recorre las carteras abiertas. Si la venta
+-- de contado fabricase una, un cobro posterior se aplicaria a una deuda que no
+-- existe: el cliente veria saldar algo que ya pago al contado, y el saldo de
+-- 1305 se llevaria un doble cobro.
+--
+-- Esta comprobacion va ANTES de crear la venta a credito a proposito: hasta aqui
+-- la organizacion solo tiene ventas de contado, asi que no hay nada que cobrar y
+-- el cobro debe rechazarse. Esa es la prueba de que las ventas de contado no
+-- dejaron deuda colgada.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+select throws_ok(
+  $$ select public.register_payment(tests.id('bu_a'), date '2026-05-05', 'inbound', 'cash', 1000) $$,
+  '22023',
+  null,
+  '19: sin carteras abiertas no hay nada a que aplicar un cobro'
+);
+
+select is(
+  (select count(*) from finance.payments),
+  0::bigint,
+  '20: el intento fallido no dejó pagos registrados'
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- G. El libro y la cartera cuentan lo mismo
 --
 -- Esta es la conciliacion que hacia el modelo viejo. Si 1305 y la cartera
 -- divergen, el balance dice una cosa y la lista de vencimientos otra.
@@ -395,45 +422,37 @@ select is(
   coalesce((
     select sum(original_amount - paid_amount) from finance.receivables
   ), 0),
-  '19: el saldo de 1305 es exactamente la suma de las carteras'
-);
-
--- ─────────────────────────────────────────────────────────────────────────────
--- G. Una venta de contado no se cobra dos veces
---
--- El pago FIFO de register_payment recorre las carteras abiertas. Si la venta
--- de contado fabricase una, un cobro posterior se aplicaria a una deuda que no
--- existe: el cliente veria saldar algo que ya pago al contado.
--- ─────────────────────────────────────────────────────────────────────────────
-
-select throws_ok(
-  $$ select public.register_payment(tests.id('bu_a'), date '2026-05-05', 'inbound', 'cash', 1000) $$,
-  '22023',
-  null,
-  '20: sin carteras abiertas no hay nada a que aplicar un cobro'
+  '21: el saldo de 1305 es exactamente la suma de las carteras'
 );
 
 select is(
-  (select count(*) from finance.payments),
-  0::bigint,
-  '21: el intento fallido no dejó pagos registrados'
+  (select count(*) from finance.receivables),
+  1::bigint,
+  '22: de todas las ventas, solo la venta a credito dejó cartera'
 );
 
--- Con la venta a credito de la seccion D si hay algo que cobrar: el mismo cobro
--- que antes fallaba ahora se aplica a la deuda real.
+-- Ahora sí hay algo que cobrar, y el mismo cobro que antes fallaba se aplica a
+-- la deuda real. Las ventas de contado quedan fuera del FIFO: no tienen fila que
+--Ordering pueda tomar.
 select lives_ok(
   $$ select public.register_payment(tests.id('bu_a'), date '2026-05-05', 'inbound', 'cash', 1000) $$,
-  '22: el cobro se aplica a la venta a credito y no toca la de contado'
+  '23: el cobro se aplica a la venta a credito'
 );
 
 select is(
   (select paid_amount from finance.receivables where sale_id = (select sale_id from ct_credito)),
   1000::numeric,
-  '23: la cartera a credito recibio el abono'
+  '24: la cartera a credito recibió el abono'
+);
+
+select is(
+  (select count(*) from finance.payments),
+  1::bigint,
+  '25: un solo cobro, y no toca ninguna venta de contado'
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- H. La auditoria dice que paso
+-- H. La auditoría dice que pasó
 -- ─────────────────────────────────────────────────────────────────────────────
 
 select is(
@@ -444,7 +463,7 @@ select is(
       and entity_id = (select sale_id from ct_cash)
   ),
   'false',
-  '24: la auditoria distingue la venta de contado de la venta a credito'
+  '26: la auditoría distingue la venta de contado de la venta a crédito'
 );
 
 select * from finish();
