@@ -269,9 +269,13 @@ select is(
 );
 
 select is(
-  (select jsonb_object_length(new_values) from core.audit_log
-   where entity_id = (select customer_id from au) and action = 'customers.update'),
-  1,
+  (
+    select count(*) from jsonb_object_keys(
+      (select new_values from core.audit_log
+       where entity_id = (select customer_id from au) and action = 'customers.update')
+    )
+  ),
+  1::bigint,
   '15: la entrada tiene un solo campo, el que de verdad se movió'
 );
 
@@ -341,9 +345,13 @@ select is(
 );
 
 select is(
-  (select jsonb_object_length(new_values) from core.audit_log
-   where entity_id = (select contact_id from auc) and action = 'customer_contacts.update'),
-  1,
+  (
+    select count(*) from jsonb_object_keys(
+      (select new_values from core.audit_log
+       where entity_id = (select contact_id from auc) and action = 'customer_contacts.update')
+    )
+  ),
+  1::bigint,
   '21: y registra solo el campo que cambió'
 );
 
