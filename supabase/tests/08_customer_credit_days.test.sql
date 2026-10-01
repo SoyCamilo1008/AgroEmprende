@@ -151,8 +151,14 @@ begin
   -- puede tener un contexto de org_b legitimo y aun asi intentar escribir en la
   -- unidad de org_a: con `owner_a` la cabecera de org_b se rechazaria por no
   -- ser miembro y la prueba no mediria el aislamiento, mediria el fallback.
+  --
+  -- Rol `operator`, no `owner`: `organization_members_one_active_owner` permite
+  -- un solo propietario activo por organizacion, y aqui los dos ya son de
+  -- `owner_a`/`owner_b`. `operator` igual tiene `finance.sales.create`, que es
+  -- justo el permiso que la prueba necesita para que la UNICA razon del rechazo
+  -- sea el aislamiento entre unidades.
   insert into core.organization_members (organization_id, user_id, role_code)
-  values (v_org_a, v_multi, 'owner'), (v_org_b, v_multi, 'owner');
+  values (v_org_a, v_multi, 'operator'), (v_org_b, v_multi, 'operator');
 
   insert into tests.scenario (key, value) values
     ('owner_a', v_owner_a),
