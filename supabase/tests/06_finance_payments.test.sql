@@ -141,7 +141,7 @@ create temp table fin_s1 (sale_id uuid, rec_id uuid);
 insert into fin_s1 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), current_date - 20, current_date - 5,
-  'cash', 'Primera venta', '[{"product_name":"Huevos","quantity":10,"unit_price":100}]'
+  'credit', 'Primera venta', '[{"product_name":"Huevos","quantity":10,"unit_price":100}]'
 );
 update fin_s1 set rec_id =
   (select r.id from finance.receivables r where r.sale_id = fin_s1.sale_id);
@@ -150,7 +150,7 @@ create temp table fin_s2 (sale_id uuid, rec_id uuid);
 insert into fin_s2 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), current_date - 10, current_date + 5,
-  'bank_transfer', 'Segunda venta', '[{"product_name":"Pollo","quantity":1,"unit_price":2000}]'
+  'credit', 'Segunda venta', '[{"product_name":"Pollo","quantity":1,"unit_price":2000}]'
 );
 update fin_s2 set rec_id =
   (select r.id from finance.receivables r where r.sale_id = fin_s2.sale_id);
@@ -347,7 +347,7 @@ create temp table fin_s3 (sale_id uuid, rec_id uuid);
 insert into fin_s3 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), current_date, current_date + 5,
-  'card', 'Tercera venta', '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
+  'credit', 'Tercera venta', '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
 );
 update fin_s3 set rec_id =
   (select r.id from finance.receivables r where r.sale_id = fin_s3.sale_id);

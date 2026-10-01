@@ -25,8 +25,27 @@ import type {
 import type { Money, Quantity } from './money';
 
 /** Cómo entra/sale el efectivo. Todo lo no efectivo se concilia en bancos (1110). */
-export const PAYMENT_METHODS = ['cash', 'bank_transfer', 'card', 'digital_wallet'] as const;
+export const SETTLEMENT_METHODS = ['cash', 'bank_transfer', 'card', 'digital_wallet'] as const;
+export type SettlementMethod = (typeof SETTLEMENT_METHODS)[number];
+
+/**
+ * `credit` no es una forma de pago: es la ausencia de cobro inmediato. Un
+ * documento a crédito se liquida después contra 1305; cualquier otro valor se
+ * liquida en el acto contra caja o bancos y no genera cartera.
+ *
+ * Solo ventas, gastos e inversiones aceptan `credit`. Un pago no: un pago SIEMPRE
+ * mueve efectivo, por eso `Payment.method` es `SettlementMethod` y no este tipo.
+ */
+export const PAYMENT_METHODS = [...SETTLEMENT_METHODS, 'credit'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** Separa las dos cosas que antes se confundían: la condición y el medio de pago. */
+export interface SaleSettlement {
+  /** `true` si la venta se cobra después y genera cartera. `false` = venta de contado. */
+  readonly isCredit: boolean;
+  /** Por dónde entra el dinero. En una venta de contado, ya entró. */
+  readonly method: SettlementMethod;
+}
 
 export const RECEIVABLE_STATUSES = [
   'open',
@@ -60,7 +79,13 @@ export interface Sale {
   readonly invoiceNumber: string;
   readonly customerId: CustomerId;
   readonly saleDate: IsoDate;
-  readonly dueDate: IsoDate;
+  /**
+   * NULL en una venta de contado: no hay cartera, y una cartera sin fecha se
+   * perdería de la antigüedad. El servidor garantiza que sea NULL si y solo si
+   * {@link Sale.paymentMethod} es `'credit'`, así que `dueDate === null` y
+   * `paymentMethod === 'credit'` nunca se contradicen.
+   */
+  readonly dueDate: IsoDate | null;
   readonly paymentMethod: PaymentMethod;
   readonly subtotal: Money;
   readonly tax: Money;
@@ -100,7 +125,8 @@ export interface Payment {
   readonly businessUnitId: BusinessUnitId;
   readonly paymentDate: IsoDate;
   readonly direction: 'inbound' | 'outbound';
-  readonly method: PaymentMethod;
+  /** Un pago siempre mueve efectivo: `'credit'` aquí sería una mentira. */
+  readonly method: SettlementMethod;
   readonly amount: Money;
   readonly unappliedAmount: Money;
   readonly description: string | null;

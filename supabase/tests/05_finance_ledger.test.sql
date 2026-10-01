@@ -155,7 +155,7 @@ create temporary table created_sales (sale_id uuid);
 insert into created_sales (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), current_date, current_date + 15,
-  'cash', 'Venta de prueba', '[{"product_name":"Huevos","quantity":20,"unit_price":500}]'
+  'credit', 'Venta de prueba', '[{"product_name":"Huevos","quantity":20,"unit_price":500}]'
 );
 
 select is(
@@ -215,7 +215,7 @@ select is(
 insert into created_sales (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), current_date, current_date + 15,
-  'bank_transfer', 'Segunda venta', '[{"product_name":"Pollo","quantity":2,"unit_price":1200}]'
+  'credit', 'Segunda venta', '[{"product_name":"Pollo","quantity":2,"unit_price":1200}]'
 );
 
 select is(

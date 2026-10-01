@@ -59,9 +59,17 @@ export type {
   Reinvestment,
   Sale,
   SaleItem,
+  SaleSettlement,
+  SettlementMethod,
   UserFacingPaymentStatus,
 } from './finance';
-export { EXPENSE_TYPES, PAYMENT_METHODS, PAYMENT_STATUSES, RECEIVABLE_STATUSES } from './finance';
+export {
+  EXPENSE_TYPES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+  RECEIVABLE_STATUSES,
+  SETTLEMENT_METHODS,
+} from './finance';
 
 export type {
   DailyProduction,

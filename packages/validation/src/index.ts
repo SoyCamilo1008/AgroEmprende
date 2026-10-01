@@ -62,16 +62,36 @@ export const saleItemSchema = z.object({
   businessUnitId: uuidSchema,
 });
 
+/**
+ * Cómo se cobra la venta.
+ *
+ * `credit` no es una forma de pago: es la ausencia de cobro inmediato. Es el
+ * mismo vocabulario que usa `finance.expenses`, y el servidor lo lee igual:
+ * una venta `credit` genera cartera y vence, cualquier otra se liquida en el
+ * acto contra caja o bancos y no genera nada que cobrar.
+ */
+export const salePaymentMethodSchema = z.enum([
+  'cash',
+  'bank_transfer',
+  'card',
+  'digital_wallet',
+  'credit',
+]);
+
 export const createSaleSchema = z.object({
   /** Cliente global; la unidad de negocio va en las líneas. */
   customerId: uuidSchema,
   businessUnitId: uuidSchema,
   saleDate: isoDateSchema,
-  documentNumber: z.string().trim().max(40).optional(),
+  /** `credit` deja la venta a cobrar; los demás la liquidan en el acto. */
+  paymentMethod: salePaymentMethodSchema,
   items: z.array(saleItemSchema).min(1, 'La venta debe tener al menos una línea'),
   discount: pesoAmountSchema.default(0),
-  /** Sin cuenta por cobrar: la venta se cobra de inmediato. */
-  isCredit: z.boolean().default(false),
+  /**
+   * Vencimiento. Solo lo calcula el servidor a partir de los términos del
+   * cliente; el cliente lo envía como contraste y el servidor lo rechaza si no
+   * coincide (ADR-0003: la fuente de la fecha es el servidor).
+   */
   dueDate: isoDateSchema.optional(),
   notes: notesSchema,
   /** Clave de idempotencia generada por el cliente. */
@@ -81,19 +101,35 @@ export const createSaleSchema = z.object({
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
 /**
- * Coherencia de la venta a crédito: si es a crédito, la fecha de vencimiento
- * es obligatoria. Sin esta regla se pueden crear cuentas por cobrar que nunca
- * vencen y que desaparecen de los reportes de antigüedad.
+ * Coherencia entre condición de cobro y vencimiento.
+ *
+ * El servidor (CHECK `sales_credit_due_date_agreement`) garantiza que la venta
+ * sea a crédito si y solo si tiene vencimiento. Esta regla replica el mismo
+ * invariante en el cliente para que el error llegue al usuario antes de gastar
+ * una ida al servidor, y no después.
  */
 export const createSaleSchemaRefined = createSaleSchema.superRefine((data, ctx) => {
-  if (data.isCredit && !data.dueDate) {
+  const isCredit = data.paymentMethod === 'credit';
+
+  if (isCredit && !data.dueDate) {
     ctx.addIssue({
       code: 'custom',
       path: ['dueDate'],
       message: 'Una venta a crédito requiere fecha de vencimiento',
     });
   }
+
+  if (!isCredit && data.dueDate) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['dueDate'],
+      message: 'Una venta de contado no lleva fecha de vencimiento: no hay nada que cobrar',
+    });
+  }
 });
+
+/** El metodo con el que entra el efectivo. Un pago nunca es 'credit'. */
+export const settlementMethodSchema = z.enum(['cash', 'bank_transfer', 'card', 'digital_wallet']);
 
 /** Pago (abono) a una cuenta por cobrar. */
 export const registerPaymentSchema = z.object({
@@ -103,16 +139,7 @@ export const registerPaymentSchema = z.object({
   amount: pesoAmountSchema.refine((value) => value > 0, {
     message: 'El valor del pago debe ser mayor que cero',
   }),
-  method: z.enum([
-    'cash',
-    'transfer',
-    'nequi',
-    'daviplata',
-    'pse',
-    'debit_card',
-    'credit_card',
-    'other',
-  ]),
+  method: settlementMethodSchema,
   accountId: uuidSchema,
   /** Cuentas a las que se aplica el pago, en orden de aplicación. */
   receivableIds: z.array(uuidSchema).default([]),
@@ -149,7 +176,8 @@ export const createExpenseSchema = z.object({
   /** Distribución analítica del costo a un lote o ciclo concreto. */
   costObjectType: z.enum(['flock', 'pig', 'pig_cycle', 'none']).default('none'),
   costObjectId: uuidSchema.optional(),
-  paymentMethod: z.enum(['cash', 'transfer', 'nequi', 'daviplata', 'pse', 'other']).optional(),
+  /** Igual que en ventas: 'credit' genera cuentas por pagar, el resto no. */
+  paymentMethod: z.enum(['cash', 'bank_transfer', 'card', 'digital_wallet', 'credit']).optional(),
   idempotencyKey: z.uuid(),
 });
 

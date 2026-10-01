@@ -19,6 +19,8 @@ const validSale = {
   customerId: uuid,
   businessUnitId: uuid2,
   saleDate: '2026-09-27',
+  /** Por defecto la venta es de contado: no genera cartera. */
+  paymentMethod: 'cash' as const,
   items: [
     {
       productId: uuid,
@@ -103,7 +105,7 @@ describe('validación: ventas', () => {
   });
 
   it('exige fecha de vencimiento en ventas a crédito', () => {
-    const result = createSaleSchemaRefined.safeParse({ ...validSale, isCredit: true });
+    const result = createSaleSchemaRefined.safeParse({ ...validSale, paymentMethod: 'credit' });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path[0] === 'dueDate')).toBe(true);
@@ -113,14 +115,33 @@ describe('validación: ventas', () => {
   it('acepta venta a crédito con vencimiento', () => {
     const result = createSaleSchemaRefined.safeParse({
       ...validSale,
-      isCredit: true,
+      paymentMethod: 'credit',
       dueDate: '2026-10-12',
     });
     expect(result.success).toBe(true);
   });
 
   it('acepta venta de contado sin vencimiento', () => {
-    expect(createSaleSchemaRefined.safeParse({ ...validSale, isCredit: false }).success).toBe(true);
+    const result = createSaleSchemaRefined.safeParse({ ...validSale, paymentMethod: 'cash' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza una venta de contado que llega con vencimiento', () => {
+    // El servidor tiene el CHECK `sales_credit_due_date_agreement`; aqui se
+    // replica para que el error llegue antes de gastar la ida.
+    const result = createSaleSchemaRefined.safeParse({
+      ...validSale,
+      paymentMethod: 'cash',
+      dueDate: '2026-10-12',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'dueDate')).toBe(true);
+    }
+  });
+
+  it('rechaza un método de pago que no existe en la base', () => {
+    expect(createSaleSchema.safeParse({ ...validSale, paymentMethod: 'neqi' }).success).toBe(false);
   });
 });
 

@@ -1,4 +1,4 @@
--- Terminos de credito del clienteapplied al flujo de ventas.
+-- Terminos de credito del cliente aplicados al flujo de ventas.
 --
 -- Estas pruebas NO se ejecutan sin Docker: las corre el job de migraciones del CI.
 --
@@ -186,7 +186,7 @@ create temp table cd_s1 (sale_id uuid, due_date date);
 insert into cd_s1 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', null,
-  'bank_transfer', 'Venta con crédito 30',
+  'credit', 'Venta con crédito 30',
   '[{"product_name":"Huevos","quantity":10,"unit_price":1000}]'
 );
 
@@ -206,7 +206,7 @@ select is(
 select is(
   public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', date '2026-03-31',
-    'bank_transfer', 'Venta con vencimiento correcto',
+    'credit', 'Venta con vencimiento correcto',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   ) is not null,
   true,
@@ -221,7 +221,7 @@ select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', date '2026-06-30',
-    'bank_transfer', 'Venta con vencimiento inventado',
+    'credit', 'Venta con vencimiento inventado',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
@@ -234,7 +234,7 @@ select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', date '2026-03-15',
-    'bank_transfer', 'Venta con vencimiento corto',
+    'credit', 'Venta con vencimiento corto',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
@@ -263,7 +263,7 @@ create temp table cd_s0 (sale_id uuid);
 insert into cd_s0 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', null,
-  'bank_transfer', 'Venta sin crédito',
+  'credit', 'Venta sin crédito',
   '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
 );
 
@@ -277,7 +277,7 @@ select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', date '2026-03-02',
-    'bank_transfer', 'Con crédito cero no se alarga',
+    'credit', 'Con crédito cero no se alarga',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
@@ -296,7 +296,7 @@ select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', null,
-    'bank_transfer', 'Sin plazo y sin vencimiento',
+    'credit', 'Sin plazo y sin vencimiento',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
@@ -309,7 +309,7 @@ create temp table cd_sn (sale_id uuid);
 insert into cd_sn (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), date '2026-03-01', date '2026-03-05',
-  'bank_transfer', 'Sin plazo con vencimiento explícito',
+  'credit', 'Sin plazo con vencimiento explícito',
   '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
 );
 
@@ -332,7 +332,7 @@ create temp table cd_h1 (sale_id uuid);
 insert into cd_h1 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), date '2026-04-01', null,
-  'bank_transfer', 'Venta con 30 días',
+  'credit', 'Venta con 30 días',
   '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
 );
 
@@ -342,7 +342,7 @@ create temp table cd_h2 (sale_id uuid);
 insert into cd_h2 (sale_id)
 select public.create_sale(
   tests.id('bu_a'), tests.id('customer_a'), date '2026-04-01', null,
-  'bank_transfer', 'Venta con 15 días',
+  'credit', 'Venta con 15 días',
   '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
 );
 
@@ -462,7 +462,7 @@ select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_b'), date '2026-04-01', null,
-    'bank_transfer', 'Cliente ajeno',
+    'credit', 'Cliente ajeno',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
@@ -507,7 +507,7 @@ select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-04-01', null,
-    'bank_transfer', 'Unidad de la otra organización',
+    'credit', 'Unidad de la otra organización',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
@@ -539,7 +539,7 @@ select is(
 select public.create_sale(
   (select id from core.business_units where organization_id = tests.id('org_b') limit 1),
   tests.id('customer_b'), date '2026-04-01', null,
-  'bank_transfer', 'Venta en su propia organización',
+  'credit', 'Venta en su propia organización',
   '[{"product_name":"Cerdos","quantity":1,"unit_price":5000}]'
 ) is not null;
 
