@@ -438,17 +438,28 @@ select is(
 -- En PostgreSQL una vista normal se ejecuta con los privilegios de su DUEÑO, que
 -- aqui es quien aplico la migracion: un superusuario. Sin `security_invoker = true`
 -- las politicas de `sales` y `ledger_entries` no se evaluarian y esta vista
--- devolveria las ventas de TODAS las organizaciones. Aqui se le quita a `viewer`
--- el permiso de ventas y se le pregunta: si alguien quita la opcion, la asercion
--- devuelve filas y falla.
+-- devolveria las ventas de TODAS las organizaciones.
+--
+-- A `viewer` se le quita SOLO `finance.sales.read` y se le CONSERVA `finance.read` a
+-- proposito. Es lo que separa esta asercion de una que pasaria por la razon
+-- equivocada: con `finance.read` presente, el filtro `has_permission('finance.read')`
+-- de la vista deja pasar, asi que lo unico que puede impedir las filas es el RLS de
+-- `finance.sales`. En la primera version de esta migracion la vista venia sin la
+-- opcion `security_invoker`, las aserciones 19 y 20 PASARON (el filtro de permisos
+-- las tapaba) y la 15 fallo con una fuga entre organizaciones: tres ventas de la
+-- granja A servidas al dueño de la granja B.
+--
+-- Por eso el permiso que se quita es el de ventas, no el del modulo. Y por eso la
+-- prueba que de verdad atrapa la fuga es la 15, que cruza organizaciones con un
+-- dueno que tiene todos los permisos: ahi no hay ningun filtro que disimule un RLS
+-- ausente.
 --
 -- Modifica el catalogo de permisos, asi que va al final, y todo vive dentro de la
 -- transaccion que cierra con `rollback`.
 reset role;
 
 delete from core.role_permissions
-where role_code = 'viewer'
-  and permission_code in ('finance.read', 'finance.sales.read');
+where role_code = 'viewer' and permission_code = 'finance.sales.read';
 
 set local role authenticated;
 select tests.act_as(tests.id('viewer_a'));
@@ -458,7 +469,7 @@ select is(
   (select count(*) from finance.customer_sales
    where customer_id = tests.id('cliente_a')),
   0::bigint,
-  '19: sin permiso de ventas no ve ni una fila'
+  '19: con permiso del modulo pero sin el de ventas, RLS lo detiene'
 );
 
 -- Y el caso del que depende toda la honestidad de `is_voided`: `viewer` vuelve a
