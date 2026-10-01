@@ -305,9 +305,13 @@ select is(
   '13: un usuario de una sola organización resuelve sin cabecera (sin regresión)'
 );
 
--- El GUC de la misma transacción tiene prioridad sobre la cabecera: es el caso
--- de un `set` seguido de una escritura en la misma petición.
+-- El GUC de la misma transacción tiene prioridad sobre la cabecera, pero también
+-- tiene que pasar la validación de membresía: un GUC con una organización
+-- ajena NO es un atajo. Se prueba con el usuario multi (es miembro de A y de B)
+-- para que el GUC sea de una organización que realmente puede usar.
+select tests.act_as(tests.id('multi'));
 select set_config('app.current_organization_id', tests.id('org_b')::text, true);
+select tests.set_org_header(tests.id('org_a')::text);
 
 select is(
   (select private.current_organization_id()),
@@ -381,15 +385,17 @@ select is(
   '20: sin sesión la lista está vacía, no es un error'
 );
 
--- Sin sesión ni rol `authenticated` la lista se vacía en vez de fallar, como el
--- resto de lecturas del catálogo.
+-- El listado es de lectura autenticada: un anónimo no lo ejecuta. Se comprueba
+-- con `throws_ok` porque lo que importa es que NO devuelva nada, ni siquiera una
+-- lista vacía que parezca "no tienes organizaciones" a un visitante.
+reset role;
 set local role anon;
-select tests.clear_session();
 
-select is(
-  (select count(*) from private.my_organizations()),
-  0::bigint,
-  '21: un anónimo sin sesión obtiene una lista vacía, no un error 500'
+select throws_ok(
+  $$ select count(*) from private.my_organizations() $$,
+  '42501',
+  null,
+  '21: un anónimo no puede enumerar organizaciones'
 );
 
 reset role;
