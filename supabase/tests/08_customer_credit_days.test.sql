@@ -14,7 +14,7 @@
 
 begin;
 
-select plan(26);
+select plan(28);
 
 create schema if not exists tests;
 
@@ -116,6 +116,7 @@ as $$
 declare
   v_owner_a uuid := tests.make_user();
   v_owner_b uuid := tests.make_user();
+  v_multi uuid := tests.make_user();
   v_org_a uuid;
   v_org_b uuid;
   v_bu_a uuid;
@@ -146,9 +147,17 @@ begin
   values (v_org_b, 'Cliente ajeno', 30)
   returning id into v_customer_b;
 
+  -- Un tercero que pertenece a LAS DOS organizaciones. Es el unico actor que
+  -- puede tener un contexto de org_b legitimo y aun asi intentar escribir en la
+  -- unidad de org_a: con `owner_a` la cabecera de org_b se rechazaria por no
+  -- ser miembro y la prueba no mediria el aislamiento, mediria el fallback.
+  insert into core.organization_members (organization_id, user_id, role_code)
+  values (v_org_a, v_multi, 'owner'), (v_org_b, v_multi, 'owner');
+
   insert into tests.scenario (key, value) values
     ('owner_a', v_owner_a),
     ('owner_b', v_owner_b),
+    ('multi', v_multi),
     ('org_a', v_org_a),
     ('org_b', v_org_b),
     ('bu_a', v_bu_a),
@@ -475,30 +484,63 @@ select is(
   '24: ninguna cartera quedó sin cliente'
 );
 
--- Aislamiento por unidad de negocio: la UNIDAD es de org_a, pero la sesión
--- está acting como org_b (cabecera cambiada). El cliente se comprueba después
--- del permiso de unidad, así que lo que falla primero es la escritura: la
--- función se niega con 42501. Se pasa la unidad real de org_a, que es
--- justamente lo que el atacante intentaría usar desde otra organización.
+-- Aislamiento por unidad de negocio, con un contexto LEGITIMO en la otra
+-- organización.
+--
+-- `multi` es dueño de las dos, así que `x-organization-id: org_b` es un contexto
+-- válido para él y `has_permission('finance.sales.create')` es cierto. Lo que NO
+-- puede es escribir en `bu_a`, que pertenece a org_a: `can_write_business_unit`
+-- compara la unidad contra la organización activa y lo niega con 42501.
+--
+-- Esto es el caso que importa: no es "un usuario que no tiene permiso", es "un
+-- usuario con todos los permisos escribiendo fuera de su organización activa".
+select tests.act_as(tests.id('multi'));
 select tests.set_org_header(tests.id('org_b')::text);
 
 select throws_ok(
   $$
   select public.create_sale(
     tests.id('bu_a'), tests.id('customer_a'), date '2026-04-01', null,
-    'bank_transfer', 'Unidad ajena',
+    'bank_transfer', 'Unidad de la otra organización',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
   '42501',
   null,
-  '25: no se puede escribir en la unidad de negocio de otra organización'
+  '25: con contexto en org_b no se puede escribir en la unidad de org_a'
 );
+
+-- Y en el mismo contexto, su propio cliente de org_b sí funciona: la prueba
+-- anterior no está midiendo "create_sale roto" sino el aislamiento.
+select public.create_sale(
+  (select id from core.business_units where organization_id = tests.id('org_b') limit 1),
+  tests.id('customer_b'), date '2026-04-01', null,
+  'bank_transfer', 'Venta en su propia organización',
+  '[{"product_name":"Cerdos","quantity":1,"unit_price":5000}]'
+) is not null;
+
+select is(
+  (select count(*) from finance.sales),
+  7::bigint,
+  '26: solo la venta de su propia organización se creó'
+);
+
+-- Y de vuelta a org_a, la cartera sigue intacta: la venta de org_b no sefiltró.
+select tests.act_as(tests.id('owner_a'));
+select tests.set_org_header(tests.id('org_a')::text);
 
 select is(
   (select count(*) from finance.sales),
   6::bigint,
-  '26: las ventas de esta organización no grewan al cambiar de contexto'
+  '27: org_a sigue viendo solo sus 6 ventas'
+);
+
+select is(
+  (select count(*) from finance.receivables r
+   join finance.sales s on s.id = r.sale_id
+   where s.customer_id = tests.id('customer_b')),
+  0::bigint,
+  '28: la cartera del cliente de org_b no es visible desde org_a'
 );
 
 select * from finish();
