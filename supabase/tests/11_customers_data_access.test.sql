@@ -336,8 +336,10 @@ select is(
 );
 
 set local role authenticated;
-select tests.act_as(tests.id('owner_a'));
-select tests.set_org_header(tests.id('org_a')::text);
+
+-- NO se restablece la sesión aquí. Las dos aserciones que siguen son justamente
+-- sobre lo que se ve SIN contexto, así que restaurarla las volvería verdaderas
+-- por la razón equivocada. La sección E vuelve a poner su propio contexto.
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- D. Sin contexto tampoco se lee
