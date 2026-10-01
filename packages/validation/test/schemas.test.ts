@@ -6,6 +6,8 @@ import {
   phoneSchema,
 } from '../src/common';
 import {
+  createExpenseSchema,
+  createExpenseSchemaRefined,
   createSaleSchema,
   createSaleSchemaRefined,
   customerSchema,
@@ -104,12 +106,12 @@ describe('validación: ventas', () => {
     expect(result.success).toBe(false);
   });
 
-  it('exige fecha de vencimiento en ventas a crédito', () => {
+  it('acepta venta a crédito sin vencimiento: el servidor lo deriva de los términos', () => {
+    // Si el cliente tiene crédito acordado, `create_sale` calcula
+    // saleDate + credit_days. Exigirlo aquí rechazaría una venta que la base de
+    // datos acepta, y obligaría al formulario a repetir ese cálculo.
     const result = createSaleSchemaRefined.safeParse({ ...validSale, paymentMethod: 'credit' });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path[0] === 'dueDate')).toBe(true);
-    }
+    expect(result.success).toBe(true);
   });
 
   it('acepta venta a crédito con vencimiento', () => {
@@ -142,6 +144,60 @@ describe('validación: ventas', () => {
 
   it('rechaza un método de pago que no existe en la base', () => {
     expect(createSaleSchema.safeParse({ ...validSale, paymentMethod: 'neqi' }).success).toBe(false);
+  });
+});
+
+describe('validación: gastos', () => {
+  const validExpense = {
+    businessUnitId: uuid2,
+    expenseDate: '2026-09-27',
+    category: 'feed' as const,
+    amount: 250_000,
+    description: 'Compra de concentrado',
+    idempotencyKey: uuid,
+  };
+
+  it('acepta un gasto de contado sin vencimiento', () => {
+    const result = createExpenseSchemaRefined.safeParse({ ...validExpense, paymentMethod: 'cash' });
+    expect(result.success).toBe(true);
+  });
+
+  it('exige vencimiento en un gasto a crédito', () => {
+    // El proveedor no tiene términos acordados: no hay nada que derivar, así que
+    // el vencimiento tiene que venir en la petición.
+    const result = createExpenseSchemaRefined.safeParse({
+      ...validExpense,
+      paymentMethod: 'credit',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'dueDate')).toBe(true);
+    }
+  });
+
+  it('acepta un gasto a crédito con vencimiento', () => {
+    const result = createExpenseSchemaRefined.safeParse({
+      ...validExpense,
+      paymentMethod: 'credit',
+      dueDate: '2026-10-12',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza un gasto de contado que llega con vencimiento', () => {
+    const result = createExpenseSchemaRefined.safeParse({
+      ...validExpense,
+      paymentMethod: 'cash',
+      dueDate: '2026-10-12',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path[0] === 'dueDate')).toBe(true);
+    }
+  });
+
+  it('exige un monto mayor que cero', () => {
+    expect(createExpenseSchema.safeParse({ ...validExpense, amount: 0 }).success).toBe(false);
   });
 });
 

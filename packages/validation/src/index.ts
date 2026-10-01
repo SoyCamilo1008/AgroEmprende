@@ -107,19 +107,15 @@ export type CreateSaleInput = z.infer<typeof createSaleSchema>;
  * sea a crédito si y solo si tiene vencimiento. Esta regla replica el mismo
  * invariante en el cliente para que el error llegue al usuario antes de gastar
  * una ida al servidor, y no después.
+ *
+ * Solo se replica la mitad que el cliente puede saber. En una venta a crédito el
+ * vencimiento es OPCIONAL: si el cliente tiene términos acordados, el servidor lo
+ * deriva como `saleDate + creditDays` y rechaza el que le manden si no coincide
+ * (ADR-0003). Exigirlo aquí obligaría al formulario a repetir el cálculo del
+ * servidor y a rechazar requests que la base de datos acepta sin problema.
  */
 export const createSaleSchemaRefined = createSaleSchema.superRefine((data, ctx) => {
-  const isCredit = data.paymentMethod === 'credit';
-
-  if (isCredit && !data.dueDate) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['dueDate'],
-      message: 'Una venta a crédito requiere fecha de vencimiento',
-    });
-  }
-
-  if (!isCredit && data.dueDate) {
+  if (data.paymentMethod !== 'credit' && data.dueDate) {
     ctx.addIssue({
       code: 'custom',
       path: ['dueDate'],
@@ -178,10 +174,42 @@ export const createExpenseSchema = z.object({
   costObjectId: uuidSchema.optional(),
   /** Igual que en ventas: 'credit' genera cuentas por pagar, el resto no. */
   paymentMethod: z.enum(['cash', 'bank_transfer', 'card', 'digital_wallet', 'credit']).optional(),
+  /**
+   * Vencimiento de la cuenta por pagar. Aquí sí es obligatorio en crédito: el
+   * proveedor no tiene términos acordados que el servidor pueda derivar, así que
+   * quien dice cuándo vence es el llamador (`create_expense` rechaza el crédito
+   * sin fecha con 22023).
+   */
+  dueDate: isoDateSchema.optional(),
   idempotencyKey: z.uuid(),
 });
 
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
+
+/**
+ * Réplica del contrato de `create_expense`: el crédito siempre vence y el resto
+ * nunca. A diferencia de la venta, aquí no hay `credit_days` que consultation, de
+ * modo que las dos mitades del invariante sí son comprobables en el cliente.
+ */
+export const createExpenseSchemaRefined = createExpenseSchema.superRefine((data, ctx) => {
+  const isCredit = data.paymentMethod === 'credit';
+
+  if (isCredit && !data.dueDate) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['dueDate'],
+      message: 'Un gasto a crédito requiere fecha de vencimiento',
+    });
+  }
+
+  if (!isCredit && data.dueDate) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['dueDate'],
+      message: 'Un gasto de contado no lleva fecha de vencimiento: no hay nada que pagar',
+    });
+  }
+});
 
 /** Configuración de una unidad de negocio al crearla. */
 export const createBusinessUnitSchema = z.object({
