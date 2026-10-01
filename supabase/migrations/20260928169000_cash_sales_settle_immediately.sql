@@ -59,9 +59,9 @@ comment on column finance.sales.payment_method is
   '''credit'' = la venta se cobra después y genera cartera en 1305. Los demás métodos se liquidan en el acto contra caja (1105) o bancos (1110).';
 
 -- 5. El índice de vencimientos solo tiene sentido donde hay algo que vence.
---    Sin calificar, igual que lo creó `20260928153000`: el índice vive en el
---    esquema por defecto y el nombre es el mismo.
-drop index if exists sales_receivables_due;
+--    `CREATE INDEX` sin esquema crea el índice en el esquema de la TABLA, así
+--    que el original quedó en `finance`, no en `public`.
+drop index if exists finance.sales_receivables_due;
 create index sales_receivables_due on finance.sales (organization_id, due_date)
   where due_date is not null;
 
