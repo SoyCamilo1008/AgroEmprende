@@ -304,82 +304,7 @@ select is(
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- D. La venta a credito sigue siendo una venta a credito
---
--- El camino nuevo no puede haber cambiado el viejo.
--- ─────────────────────────────────────────────────────────────────────────────
-
-create temp table ct_credito (sale_id uuid);
-insert into ct_credito (sale_id)
-select public.create_sale(
-  tests.id('bu_a'), tests.id('cliente_credito'), date '2026-05-04', null,
-  'credit', 'Venta a credito de verdad',
-  '[{"product_name":"Huevos","quantity":10,"unit_price":1000}]'
-);
-
-select is(
-  (select due_date from finance.sales where id = (select sale_id from ct_credito)),
-  date '2026-06-03',
-  '13: la venta a credito conserva el vencimiento de los terminos del cliente'
-);
-
-select is(
-  (select original_amount from finance.receivables where sale_id = (select sale_id from ct_credito)),
-  10000::numeric,
-  '14: la venta a credito si genera cartera por el total'
-);
-
-select is(
-  (select l.debit from finance.ledger_lines l
-   join finance.ledger_entries e on e.id = l.entry_id
-   join core.accounts a on a.id = l.account_id
-   where e.source_type = 'finance.sales'
-     and e.source_id = (select sale_id from ct_credito)
-     and a.code = '1305'),
-  10000::numeric,
-  '15: la venta a credito debita 1305 como siempre'
-);
-
--- ─────────────────────────────────────────────────────────────────────────────
--- E. El invariante entre metodo y vencimiento
---
--- El CHECK `sales_credit_due_date_agreement` ata las dos columnas. Estas
--- aserciones no lo escriben a proposito (RLS deja a authenticated en solo
--- lectura sobre ventas); comprueban que create_sale respeta el invariante.
--- ─────────────────────────────────────────────────────────────────────────────
-
-select is(
-  (
-    select count(*) from finance.sales
-    where (payment_method = 'credit') <> (due_date is not null)
-  ),
-  0::bigint,
-  '16: toda venta a credito tiene vencimiento y toda venta de contado no lo tiene'
-);
-
--- Una venta de contado con vencimiento no significa nada: se rechaza, y no
--- queda ninguna venta a medias.
-select throws_ok(
-  $$
-  select public.create_sale(
-    tests.id('bu_a'), tests.id('cliente_contado'), date '2026-05-04', date '2026-05-20',
-    'cash', 'Contada con vencimiento',
-    '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
-  )
-  $$,
-  '22023',
-  null,
-  '17: una venta de contado con fecha de vencimiento se rechaza'
-);
-
-select is(
-  (select count(*) from finance.sales where description = 'Contada con vencimiento'),
-  0::bigint,
-  '18: el rechazo no dejó la venta a medias'
-);
-
--- ─────────────────────────────────────────────────────────────────────────────
--- F. Una venta de contado no se cobra dos veces
+-- D. Una venta de contado no se cobra dos veces
 --
 -- El pago FIFO de `register_payment` recorre las carteras abiertas. Si la venta
 -- de contado fabricase una, un cobro posterior se aplicaria a una deuda que no
@@ -396,13 +321,88 @@ select throws_ok(
   $$ select public.register_payment(tests.id('bu_a'), date '2026-05-05', 'inbound', 'cash', 1000) $$,
   '22023',
   null,
-  '19: sin carteras abiertas no hay nada a que aplicar un cobro'
+  '13: sin carteras abiertas no hay nada a que aplicar un cobro'
 );
 
 select is(
   (select count(*) from finance.payments),
   0::bigint,
-  '20: el intento fallido no dejó pagos registrados'
+  '14: el intento fallido no dejó pagos registrados'
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- E. La venta a credito sigue siendo una venta a credito
+--
+-- El camino nuevo no puede haber cambiado el viejo.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create temp table ct_credito (sale_id uuid);
+insert into ct_credito (sale_id)
+select public.create_sale(
+  tests.id('bu_a'), tests.id('cliente_credito'), date '2026-05-04', null,
+  'credit', 'Venta a credito de verdad',
+  '[{"product_name":"Huevos","quantity":10,"unit_price":1000}]'
+);
+
+select is(
+  (select due_date from finance.sales where id = (select sale_id from ct_credito)),
+  date '2026-06-03',
+  '15: la venta a credito conserva el vencimiento de los terminos del cliente'
+);
+
+select is(
+  (select original_amount from finance.receivables where sale_id = (select sale_id from ct_credito)),
+  10000::numeric,
+  '16: la venta a credito si genera cartera por el total'
+);
+
+select is(
+  (select l.debit from finance.ledger_lines l
+   join finance.ledger_entries e on e.id = l.entry_id
+   join core.accounts a on a.id = l.account_id
+   where e.source_type = 'finance.sales'
+     and e.source_id = (select sale_id from ct_credito)
+     and a.code = '1305'),
+  10000::numeric,
+  '17: la venta a credito debita 1305 como siempre'
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- F. El invariante entre metodo y vencimiento
+--
+-- El CHECK `sales_credit_due_date_agreement` ata las dos columnas. Estas
+-- aserciones no lo escriben a proposito (RLS deja a authenticated en solo
+-- lectura sobre ventas); comprueban que create_sale respeta el invariante.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+select is(
+  (
+    select count(*) from finance.sales
+    where (payment_method = 'credit') <> (due_date is not null)
+  ),
+  0::bigint,
+  '18: toda venta a credito tiene vencimiento y toda venta de contado no lo tiene'
+);
+
+-- Una venta de contado con vencimiento no significa nada: se rechaza, y no
+-- queda ninguna venta a medias.
+select throws_ok(
+  $$
+  select public.create_sale(
+    tests.id('bu_a'), tests.id('cliente_contado'), date '2026-05-04', date '2026-05-20',
+    'cash', 'Contada con vencimiento',
+    '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
+  )
+  $$,
+  '22023',
+  null,
+  '19: una venta de contado con fecha de vencimiento se rechaza'
+);
+
+select is(
+  (select count(*) from finance.sales where description = 'Contada con vencimiento'),
+  0::bigint,
+  '20: el rechazo no dejó la venta a medias'
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
