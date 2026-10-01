@@ -378,20 +378,30 @@ summary as (
       as business_unit_name,
     grouping(pu.business_unit_id) = 1 as is_consolidated,
     -- `sum()` de un bigint devuelve numeric; los conteos se devuelven enteros.
-    sum(pu.sales_count)::bigint as sales_count,
-    sum(pu.cash_sales_count)::bigint as cash_sales_count,
-    sum(pu.credit_sales_count)::bigint as credit_sales_count,
-    sum(pu.receivable_count)::bigint as receivable_count,
-    sum(pu.open_count)::bigint as open_count,
-    sum(pu.partial_count)::bigint as partial_count,
-    sum(pu.overdue_count)::bigint as overdue_count,
-    sum(pu.paid_count)::bigint as paid_count,
-    sum(pu.total_sold)::numeric(18, 2) as total_sold,
-    sum(pu.cash_sales_total)::numeric(18, 2) as cash_sales_total,
-    sum(pu.credit_billed)::numeric(18, 2) as credit_billed,
-    sum(pu.total_paid)::numeric(18, 2) as total_paid,
-    sum(pu.outstanding)::numeric(18, 2) as outstanding,
-    sum(pu.overdue_outstanding)::numeric(18, 2) as overdue_outstanding,
+    --
+    -- El `coalesce` no es cosmetico. Un cliente sin ventas deja `per_unit` vacio, y
+    -- `group by ()` sobre una entrada vacia produce UNA fila, no cero: es el
+    -- conjunto de agrupacion constante, y `sum()` de nada es NULL. Sin el
+    -- `coalesce` ese cliente recibia un resumen con el saldo en NULL, que obliga a
+    -- la interfaz a inventar un caso que no existe. Cero es la respuesta honesta a
+    -- "no debe nada", y el `()` de `grouping sets` ya garantiza que la fila
+    -- consolidada exista siempre: por eso no hace falta una fila de ceros aparte.
+    coalesce(sum(pu.sales_count), 0)::bigint as sales_count,
+    coalesce(sum(pu.cash_sales_count), 0)::bigint as cash_sales_count,
+    coalesce(sum(pu.credit_sales_count), 0)::bigint as credit_sales_count,
+    coalesce(sum(pu.receivable_count), 0)::bigint as receivable_count,
+    coalesce(sum(pu.open_count), 0)::bigint as open_count,
+    coalesce(sum(pu.partial_count), 0)::bigint as partial_count,
+    coalesce(sum(pu.overdue_count), 0)::bigint as overdue_count,
+    coalesce(sum(pu.paid_count), 0)::bigint as paid_count,
+    coalesce(sum(pu.total_sold), 0)::numeric(18, 2) as total_sold,
+    coalesce(sum(pu.cash_sales_total), 0)::numeric(18, 2) as cash_sales_total,
+    coalesce(sum(pu.credit_billed), 0)::numeric(18, 2) as credit_billed,
+    coalesce(sum(pu.total_paid), 0)::numeric(18, 2) as total_paid,
+    coalesce(sum(pu.outstanding), 0)::numeric(18, 2) as outstanding,
+    coalesce(sum(pu.overdue_outstanding), 0)::numeric(18, 2) as overdue_outstanding,
+    -- Sin `coalesce` a proposito: si no hay deuda abierta no hay una fecha mas
+    -- antigua que buscar, y `null` dice eso. Cero seria una fecha de mentira.
     min(pu.oldest_open_due_date) as oldest_open_due_date
   from per_unit pu
   left join core.business_units bu
@@ -399,32 +409,10 @@ summary as (
    and bu.id = pu.business_unit_id
   group by grouping sets ((pu.business_unit_id, bu.code, bu.name), ())
 )
--- Un cliente sin historial devuelve una fila consolidada en cero, no cero filas:
--- la interfaz no tiene que distinguir "sin datos" de "no consultó".
-select * from summary
-union all
-select
-  (select private.current_organization_id()),
-  null::uuid,
-  null::text,
-  null::text,
-  true,
-  0::bigint,
-  0::bigint,
-  0::bigint,
-  0::bigint,
-  0::bigint,
-  0::bigint,
-  0::bigint,
-  0::bigint,
-  0::numeric(18, 2),
-  0::numeric(18, 2),
-  0::numeric(18, 2),
-  0::numeric(18, 2),
-  0::numeric(18, 2),
-  0::numeric(18, 2),
-  null::date
-where not exists (select 1 from summary);
+-- Un cliente sin historial devuelve su fila consolidada en cero (gracias al
+-- `coalesce` de arriba): la interfaz no tiene que distinguir "sin datos" de
+-- "no se consulto".
+select * from summary;
 end;
 $$;
 
