@@ -122,10 +122,21 @@ where not exists (
 comment on view finance.customer_receivables is
   'Cartera de un cliente: una fila por obligacion de finance.receivables, con su venta y unidad de negocio. Excluye ventas anuladas (contra-asiento reversal, ADR-0003). `balance` se deriva al leer; RLS de las tablas subyacentes sigue aplicando (security_invoker).';
 
--- La consulta principal es "obligaciones de este cliente, mas antiguas primero".
--- El indice parcial existente `receivables_open` cubre `paid_amount < original_amount`,
--- pero el filtro por cliente pasa por `sales.customer_id`, que no esta en ese indice.
-create index customer_receivables_customer on finance.customer_receivables (customer_id, due_date);
+-- El indice que esta consulta necesita, y POR QUE va en la tabla y no en la vista.
+--
+-- La consulta principal es "obligaciones de este cliente, mas antiguas primero", y
+-- el filtro de cliente entra por `finance.sales.customer_id`, que no tiene indice
+-- propio: los de ventas son por organizacion y fecha. El indice parcial
+-- `receivables_open` ayuda a `receivables`, pero no a encontrar la venta.
+--
+-- La tentacion es indexar la vista, y PostgreSQL la rechaza:
+-- `cannot create index on relation ... (SQLSTATE 42809) / This operation is not
+-- supported for views`. Los indices solo se crean sobre vistas MATERIALIZADAS. Asi
+-- que el indice se pone en `sales`, que es la tabla que realmente se lee, y la
+-- vista se apoya en el como cualquier otra consulta. Un indice sobre una vista no
+-- serviria de nada ademas: no se usa cuando el planificador incrusta la vista en
+-- un join, que es justo lo que hace aqui.
+create index sales_customer on finance.sales (organization_id, customer_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- finance.customer_payments
@@ -202,7 +213,10 @@ where a.allocation_type = 'receivable'
 comment on view finance.customer_payments is
   'Abonos de un cliente: una fila por pago aplicado a una obligacion suya. La unidad de negocio es la de la VENTA (la que espera el dinero), no la del pago, que puede venir de otra unidad.';
 
-create index customer_payments_customer on finance.customer_payments (customer_id, payment_date desc);
+-- Sin indice propio: esta vista tambien filtra por `sales.customer_id`, asi que la
+-- apoya en `sales_customer`, y el orden por fecha en `payments_period`
+-- (`organization_id, payment_date, direction`), que ya existe. Indexar vistas no
+-- es una opcion (vease el comentario de `sales_customer` mas arriba).
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- finance.customer_financial_summary
