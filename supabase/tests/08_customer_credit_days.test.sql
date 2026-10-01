@@ -14,7 +14,7 @@
 
 begin;
 
-select plan(28);
+select plan(30);
 
 create schema if not exists tests;
 
@@ -516,6 +516,24 @@ select throws_ok(
   '25: con contexto en org_b no se puede escribir en la unidad de org_a'
 );
 
+-- Y el permiso sobre la unidad es un límite real, no una formalidad: el helper
+-- de autorización niega la unidad de org_a aunque el usuario tenga membresía
+-- activa en la organización activa. Esta es la aserción que justifica la
+-- migración 20260928168000.
+select is(
+  private.can_write_business_unit(tests.id('bu_a')),
+  false,
+  '26: con contexto en org_b, la autorización niega la unidad de org_a'
+);
+
+select is(
+  private.can_write_business_unit(
+    (select id from core.business_units where organization_id = tests.id('org_b') limit 1)
+  ),
+  true,
+  '27: con contexto en org_b, la autorización permite su propia unidad'
+);
+
 -- Y en el mismo contexto, su propio cliente de org_b sí funciona: la prueba
 -- anterior no está midiendo "create_sale roto" sino el aislamiento.
 select public.create_sale(
@@ -528,7 +546,7 @@ select public.create_sale(
 select is(
   (select count(*) from finance.sales),
   7::bigint,
-  '26: solo la venta de su propia organización se creó'
+  '28: solo la venta de su propia organización se creó'
 );
 
 -- Y de vuelta a org_a, la cartera sigue intacta: la venta de org_b no sefiltró.
@@ -538,7 +556,7 @@ select tests.set_org_header(tests.id('org_a')::text);
 select is(
   (select count(*) from finance.sales),
   6::bigint,
-  '27: org_a sigue viendo solo sus 6 ventas'
+  '29: org_a sigue viendo solo sus 6 ventas'
 );
 
 select is(
@@ -546,7 +564,7 @@ select is(
    join finance.sales s on s.id = r.sale_id
    where s.customer_id = tests.id('customer_b')),
   0::bigint,
-  '28: la cartera del cliente de org_b no es visible desde org_a'
+  '30: la cartera del cliente de org_b no es visible desde org_a'
 );
 
 select * from finish();
