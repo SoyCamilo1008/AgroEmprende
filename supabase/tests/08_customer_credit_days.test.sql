@@ -543,10 +543,12 @@ select public.create_sale(
   '[{"product_name":"Cerdos","quantity":1,"unit_price":5000}]'
 ) is not null;
 
+-- RLS hace que el conteo sea el de SU organización activa: aquí solo existe la
+-- venta de org_b. Las 6 de org_a existen pero no son visibles, que es el punto.
 select is(
   (select count(*) from finance.sales),
-  7::bigint,
-  '28: solo la venta de su propia organización se creó'
+  1::bigint,
+  '28: desde org_b solo se ve la venta de org_b'
 );
 
 -- Y de vuelta a org_a, la cartera sigue intacta: la venta de org_b no sefiltró.
