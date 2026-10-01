@@ -174,6 +174,65 @@ describe('validación: clientes', () => {
   it('exige el cliente al que pertenece el contacto', () => {
     expect(customerContactSchema.safeParse({ name: 'María López' }).success).toBe(false);
   });
+
+  it('deja vaciar un campo que ya estaba, porque la columna lo permite', () => {
+    // Sin esto no hay forma de quitarle el teléfono a un cliente que ya lo
+    // tenía: mandar `''` no escribiría nada y el número se quedaría siempre.
+    // `core.customers.phone` es nullable, así que el schema tiene que admitirlo.
+    const result = customerSchema.safeParse({ name: 'Juan Pérez', phone: null, email: null });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.phone).toBeNull();
+      expect(result.data.email).toBeNull();
+    }
+  });
+
+  it('distingue "vaciar" (null) de "no tocarlo" (ausente)', () => {
+    // Son los dos estados que el repositorio necesita para no borrar datos por
+    // accidente al editar un formulario.
+    const vaciado = customerSchema.safeParse({ name: 'Juan Pérez', address: null });
+    const intacto = customerSchema.safeParse({ name: 'Juan Pérez' });
+    expect(vaciado.success && vaciado.data.address).toBeNull();
+    expect(intacto.success).toBe(true);
+    if (intacto.success) {
+      expect(intacto.data).not.toHaveProperty('address');
+    }
+  });
+
+  it('trata el campo vacío del formulario como "no tocar"', () => {
+    // Un input de texto vacío llega como `''`. No es una orden de borrar: es que
+    // el usuario no escribió nada ahí.
+    const result = customerSchema.safeParse({ name: 'Juan Pérez', phone: '', email: '' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.phone).toBeUndefined();
+      expect(result.data.email).toBeUndefined();
+    }
+  });
+
+  it('un contacto también se puede vaciar', () => {
+    const result = customerContactSchema.safeParse({
+      customerId: uuid,
+      name: 'María López',
+      role: null,
+      phone: null,
+      notes: null,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.role).toBeNull();
+      expect(result.data.phone).toBeNull();
+      expect(result.data.notes).toBeNull();
+    }
+  });
+
+  it('un null no se cuela como valor válido de un campo con reglas', () => {
+    // `null` es "vaciar", no "cualquier valor": las reglas siguen mandando cuando
+    // hay texto. Un `null` en el nombre no puede convertirlo en opcional.
+    expect(customerSchema.safeParse({ name: null }).success).toBe(false);
+    expect(customerSchema.safeParse({ name: 'Juan', code: null }).success).toBe(true);
+    expect(customerSchema.safeParse({ name: 'Juan', taxId: null }).success).toBe(true);
+  });
 });
 
 describe('validación: ventas', () => {

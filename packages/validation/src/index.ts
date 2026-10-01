@@ -19,6 +19,24 @@ import {
 } from './common';
 
 /**
+ * Texto opcional que además se puede vaciar.
+ *
+ * Son tres estados distintos y confundirlos rompe el guardado:
+ * - ausente o `undefined`: el formulario no lo tocó, no se escribe nada;
+ * - `null`: vaciar el dato a propósito, se escribe `NULL`;
+ * - `''`: un campo de formulario vacío, se normaliza a `undefined` para que no
+ *   cuente como un cambio.
+ *
+ * Sin `null` no hay forma de quitarle el teléfono a un cliente que ya lo tenía:
+ * mandar `''` no escribiría nada y el número se quedaría para siempre.
+ */
+const clearableText = <T extends z.ZodType<string>>(schema: T) =>
+  schema
+    .nullable()
+    .optional()
+    .or(z.literal('').transform(() => undefined));
+
+/**
  * Cliente de la organización: refleja `core.customers` campo por campo.
  *
  * No hay `type`, `documentType` ni `creditLimit` a propósito. Los dos primeros no
@@ -42,16 +60,18 @@ export const customerSchema = z.object({
       /^[A-Z0-9_-]{2,32}$/u,
       'El código son de 2 a 32 caracteres: letras, números, guion o guion bajo',
     )
+    .nullable()
     .optional(),
   /** NIT/NUI: solo dígitos, de 6 a 15. */
   taxId: z
     .string()
     .trim()
     .regex(/^[0-9]{6,15}$/u, 'El NIT son de 6 a 15 dígitos, sin guiones ni letras')
+    .nullable()
     .optional(),
-  email: emailSchema.optional().or(z.literal('').transform(() => undefined)),
-  phone: phoneSchema.optional().or(z.literal('').transform(() => undefined)),
-  address: z.string().trim().max(240).optional(),
+  email: clearableText(emailSchema),
+  phone: clearableText(phoneSchema),
+  address: z.string().trim().max(240).nullable().optional(),
   /**
    * Días de crédito acordados. `null` = no hay plazo acordado, que es distinto de
    * `0` = se paga hoy. No se rellena con un valor por defecto: 30 días es una
@@ -64,7 +84,7 @@ export const customerSchema = z.object({
     .max(CREDIT_DAYS_MAX)
     .nullable()
     .default(null),
-  notes: notesSchema,
+  notes: notesSchema.nullable(),
   isActive: z.boolean().default(true),
 });
 
@@ -77,11 +97,11 @@ export type CustomerInput = z.infer<typeof customerSchema>;
 export const customerContactSchema = z.object({
   customerId: uuidSchema,
   name: z.string().trim().min(2, 'El nombre es obligatorio').max(160),
-  role: z.string().trim().min(2).max(80).optional(),
-  email: emailSchema.optional().or(z.literal('').transform(() => undefined)),
-  phone: phoneSchema.optional().or(z.literal('').transform(() => undefined)),
+  role: z.string().trim().min(2).max(80).nullable().optional(),
+  email: clearableText(emailSchema),
+  phone: clearableText(phoneSchema),
   isPrimary: z.boolean().default(false),
-  notes: notesSchema,
+  notes: notesSchema.nullable(),
 });
 
 export type CustomerContactInput = z.infer<typeof customerContactSchema>;
