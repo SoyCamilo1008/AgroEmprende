@@ -78,6 +78,17 @@ export interface Receivable {
   readonly dueDate: IsoDate;
   readonly originalAmount: Money;
   readonly paidAmount: Money;
+  /**
+   * Instante en que la deuda quedó COMPLETAMENTE liquidada. `null` mientras exista
+   * saldo, incluso con abonos parciales.
+   *
+   * NO es la fecha del último abono: para eso está el historial de pagos
+   * (`Payment.paymentDate`). Confundir ambas rompe "cuándo se cobró" por "cuándo
+   * se saldó".
+   *
+   * El estado visible se deriva de `balance === 0` (`resolveReceivableStatus`), nunca
+   * de este campo: ver ADR-0003.
+   */
   readonly paidAt: IsoDateTime | null;
   readonly createdAt: IsoDateTime;
 }
@@ -126,6 +137,13 @@ export interface Payable {
   readonly dueDate: IsoDate;
   readonly originalAmount: Money;
   readonly paidAmount: Money;
+  /**
+   * Instante en que el crédito al proveedor quedó COMPLETAMENTE liquidado. `null`
+   * mientras exista saldo, incluso con pagos parciales.
+   *
+   * NO es la fecha del último pago: para eso está el historial de pagos. Misma
+   * semántica que {@link Receivable.paidAt}.
+   */
   readonly paidAt: IsoDateTime | null;
   readonly createdAt: IsoDateTime;
 }

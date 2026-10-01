@@ -82,6 +82,25 @@ Cambios en `main` que todavía no tienen versión.
 - **CI**: el job `migrations` ahora ejecuta `db:test` después de `db:reset` y `db:lint`,
   y el job `verify` ejecuta `tooling:check-schema`.
 
+### Cambiado
+
+- **`paid_at` pasa a ser la fecha de liquidación, no la del primer abono.** En
+  `finance.receivables` y `finance.payables` la columna se llenaba en cuanto
+  entraba el primer peso, así que una cuenta con saldo pendiente aparecía como
+  fechada y no se distinguía una deuda _tocada_ de una deuda _saldada_. Ahora
+  solo se escribe cuando `paid_amount = original_amount` y hay un
+  `check` que ata ambos hechos: `paid_at is not null` es cierto **si y solo si**
+  la deuda quedó totalmente cubierta (con `original_amount > 0` aparte, porque
+  un importe de cero ya está liquidado y no tiene fecha que registrar).
+  - Parcial → `paid_at` sigue en `NULL`; el saldo y el estado se derivan del
+    monto, nunca de esta marca. Cobertura: pgTAP `25: una deuda parcial no se
+marca como pagada`.
+  - Para mostrar _cuándo se recibió el último abono_ se usa el historial de
+    pagos (`finance.payments.payment_date`), no `paid_at`.
+  - No hay ruptura de datos: la columna nunca se ha leído para deducir estado, ni
+    en la aplicación ni en SQL, y el estado visible siempre se derivó del saldo
+    (ADR-0003).
+
 ### Corregido
 
 - **El CI moría antes de ejecutar una sola prueba.** La versión de Node fijada
