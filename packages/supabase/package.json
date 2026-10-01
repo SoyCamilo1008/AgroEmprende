@@ -2,20 +2,26 @@
   "name": "@agroemprende/supabase",
   "version": "0.1.0",
   "private": true,
-  "description": "Fábricas de clientes Supabase y validación de variables de entorno, compartidas por web, mobile y scripts.",
+  "description": "Fábricas de clientes Supabase, capa de acceso a datos de Clientes y validación de variables de entorno, compartidas por web, mobile y scripts.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./browser": "./src/browser.ts",
     "./mobile": "./src/mobile.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./errors": "./src/errors.ts",
+    "./rows": "./src/rows.ts",
+    "./repositories/customers": "./src/repositories/customers.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf .turbo *.tsbuildinfo"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf .turbo coverage *.tsbuildinfo"
   },
   "dependencies": {
+    "@agroemprende/validation": "workspace:*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",
     "zod": "^4.6.5"
@@ -23,8 +29,10 @@
   "devDependencies": {
     "@agroemprende/config": "workspace:*",
     "@agroemprende/types": "workspace:*",
+    "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^9.39.5",
     "rimraf": "^6.1.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
   }
 }

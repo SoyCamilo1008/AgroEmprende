@@ -410,6 +410,9 @@ importers:
 
   packages/supabase:
     dependencies:
+      '@agroemprende/validation':
+        specifier: workspace:*
+        version: link:../validation
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.117.2)
@@ -426,6 +429,9 @@ importers:
       '@agroemprende/types':
         specifier: workspace:*
         version: link:../types
+      '@vitest/coverage-v8':
+        specifier: ^5.0.2
+        version: 5.0.2(vitest@5.0.2)
       eslint:
         specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)(supports-color@8.1.1)
@@ -435,6 +441,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^5.0.2
+        version: 5.0.2(@types/node@26.6.3)(@vitest/coverage-v8@5.0.2)(vite@8.3.1(@types/node@26.6.3)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/types:
     devDependencies:
