@@ -475,21 +475,24 @@ select is(
   '24: ninguna cartera quedó sin cliente'
 );
 
--- Sin contexto de organización: ni siquiera el propio cliente es visible.
+-- Aislamiento por unidad de negocio: la UNIDAD es de org_a, pero la sesión
+-- está acting como org_b (cabecera cambiada). El cliente se comprueba después
+-- del permiso de unidad, así que lo que falla primero es la escritura: la
+-- función se niega con 42501. Se pasa la unidad real de org_a, que es
+-- justamente lo que el atacante intentaría usar desde otra organización.
 select tests.set_org_header(tests.id('org_b')::text);
 
 select throws_ok(
   $$
   select public.create_sale(
-    (select id from core.business_units where organization_id = tests.id('org_b') limit 1),
-    tests.id('customer_a'), date '2026-04-01', null,
-    'bank_transfer', 'Sin contexto válido',
+    tests.id('bu_a'), tests.id('customer_a'), date '2026-04-01', null,
+    'bank_transfer', 'Unidad ajena',
     '[{"product_name":"Huevos","quantity":1,"unit_price":1000}]'
   )
   $$,
   '42501',
   null,
-  '25: sin permiso sobre la unidad de negocio, la venta se rechaza'
+  '25: no se puede escribir en la unidad de negocio de otra organización'
 );
 
 select is(
