@@ -8,8 +8,9 @@
  *    (cuánta caja salió de verdad), para no mentir sobre la caja disponible.
  *  - La venta no es dinero recibido: el flujo de caja sale de los pagos.
  */
-import type { Money } from '@agroemprende/types';
+import type { IsoDate, Money, UserFacingPaymentStatus } from '@agroemprende/types';
 import { addMoney, subtractMoney, toMoney, ZERO } from './money';
+import { resolveReceivableStatus } from './sales';
 
 export interface ProfitAndLossInput {
   /** Ingresos devengados (ventas), no cobrados. */
@@ -174,16 +175,50 @@ export interface PeriodSummary {
   readonly netProfit: Money;
   readonly receivedCash: Money;
   readonly receivableBalance: Money;
-  readonly receivableStatusLabel: 'PAGADA' | 'PARCIAL' | 'PENDIENTE' | 'VENCIDA';
+  readonly receivableStatusLabel: UserFacingPaymentStatus;
 }
 
-export const calculatePeriodSummary = (
-  input: Omit<PeriodSummary, 'netProfit' | 'receivableStatusLabel'>,
-): PeriodSummary => {
+export interface PeriodSummaryInput {
+  readonly revenue: Money;
+  readonly costs: Money;
+  /** Efectivo recibido en el período. */
+  readonly receivedCash: Money;
+  /** Saldo de cartera al cierre del período. */
+  readonly receivableBalance: Money;
+  /**
+   * Total abonado a cartera en el período. NO es `receivedCash`: el efectivo
+   * recibido puede ser un abono a favor (2210) que no toca ninguna deuda, y una
+   * deuda puede abonarse con dinero recibido en otro período.
+   */
+  readonly paidAmount: Money;
+  /** Vencimiento de la cartera que se resume. */
+  readonly dueDate: IsoDate;
+  /** "Hoy" del negocio, de la zona horaria del negocio (ADR-0012). */
+  readonly today: IsoDate;
+}
+
+/**
+ * El estado de cartera se resuelve con `resolveReceivableStatus`, igual que el
+ * resto de la aplicación. Antes esta función decidía sola y solo devolvía tres
+ * de los cuatro estados: una cartera vencida con abono caía en `PARCIAL` aunque
+ * `VENCIDA` estuviera declarado en el tipo y nunca fuera alcanzable.
+ */
+export const calculatePeriodSummary = (input: PeriodSummaryInput): PeriodSummary => {
   const netProfit = subtractMoney(input.revenue, input.costs);
-  const receivableStatusLabel =
-    input.receivableBalance <= 0 ? 'PAGADA' : input.receivedCash <= 0 ? 'PENDIENTE' : 'PARCIAL';
-  return { ...input, netProfit, receivableStatusLabel };
+  const { label } = resolveReceivableStatus({
+    balance: input.receivableBalance,
+    paidAmount: input.paidAmount,
+    dueDate: input.dueDate,
+    today: input.today,
+  });
+  return {
+    revenue: input.revenue,
+    costs: input.costs,
+    netProfit,
+    receivedCash: input.receivedCash,
+    receivableBalance: input.receivableBalance,
+    receivableStatusLabel: label,
+  };
 };
 
 /** Saldo consolidado de un cliente, con desglose por unidad de negocio. */

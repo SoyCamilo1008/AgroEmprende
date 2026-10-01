@@ -149,17 +149,23 @@ describe('resultado: resumen del periodo', () => {
       costs: P(300_000),
       receivedCash: P(200_000),
       receivableBalance: P(300_000),
+      paidAmount: P(200_000),
+      dueDate: '2026-10-10',
+      today: '2026-09-27',
     });
     expect(summary.netProfit).toBe(P(200_000));
     expect(summary.receivableStatusLabel).toBe('PARCIAL');
   });
 
-  it('marca PENDIENTE si no se ha recibido nada', () => {
+  it('marca PENDIENTE si no se ha abonado nada', () => {
     const summary = calculatePeriodSummary({
       revenue: P(500_000),
       costs: P(300_000),
       receivedCash: P(0),
       receivableBalance: P(500_000),
+      paidAmount: P(0),
+      dueDate: '2026-10-10',
+      today: '2026-09-27',
     });
     expect(summary.receivableStatusLabel).toBe('PENDIENTE');
   });
@@ -170,8 +176,54 @@ describe('resultado: resumen del periodo', () => {
       costs: P(300_000),
       receivedCash: P(500_000),
       receivableBalance: P(0),
+      paidAmount: P(500_000),
+      dueDate: '2026-10-10',
+      today: '2026-09-27',
     });
     expect(summary.receivableStatusLabel).toBe('PAGADA');
+  });
+
+  // Regresión: la etiqueta VENCIDA estaba declarada en el tipo pero era
+  // inalcanzable porque la función no miraba el vencimiento.
+  it('marca VENCIDA si hay saldo y ya pasó el vencimiento', () => {
+    const summary = calculatePeriodSummary({
+      revenue: P(500_000),
+      costs: P(300_000),
+      receivedCash: P(200_000),
+      receivableBalance: P(300_000),
+      paidAmount: P(200_000),
+      dueDate: '2026-09-20',
+      today: '2026-09-27',
+    });
+    expect(summary.receivableStatusLabel).toBe('VENCIDA');
+  });
+
+  it('una cartera totalmente pagada sigue PAGADA aunque su vencimiento ya pasó', () => {
+    const summary = calculatePeriodSummary({
+      revenue: P(500_000),
+      costs: P(300_000),
+      receivedCash: P(500_000),
+      receivableBalance: P(0),
+      paidAmount: P(500_000),
+      dueDate: '2026-09-20',
+      today: '2026-09-27',
+    });
+    expect(summary.receivableStatusLabel).toBe('PAGADA');
+  });
+
+  it('no confunde efectivo recibido con abono aplicado', () => {
+    // Cliente que pagó de más: entra efectivo pero la deuda sigue abierta y sin
+    // abonos. El estado es PENDIENTE, no PARCIAL.
+    const summary = calculatePeriodSummary({
+      revenue: P(500_000),
+      costs: P(300_000),
+      receivedCash: P(200_000),
+      receivableBalance: P(500_000),
+      paidAmount: P(0),
+      dueDate: '2026-10-10',
+      today: '2026-09-27',
+    });
+    expect(summary.receivableStatusLabel).toBe('PENDIENTE');
   });
 });
 

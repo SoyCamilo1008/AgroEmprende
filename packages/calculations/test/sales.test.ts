@@ -116,6 +116,20 @@ describe('cuentas por cobrar: estado', () => {
     ).toEqual({ status: 'paid', label: 'PAGADA' });
   });
 
+  // Una deuda saldada no está "vencida" por muy vencido que sea su vencimiento:
+  // el saldo es cero y no hay nada que cobrar. La precedencia importa porque
+  // `paid_at` se escribe exactamente en ese momento.
+  it('PAGADA aunque el vencimiento ya haya pasado si no hay saldo', () => {
+    expect(
+      resolveReceivableStatus({
+        balance: P(0),
+        paidAmount: P(90_000),
+        dueDate: '2026-09-01',
+        today: '2026-09-27',
+      }),
+    ).toEqual({ status: 'paid', label: 'PAGADA' });
+  });
+
   it('VENCIDA cuando ya pasó el vencimiento con saldo', () => {
     expect(
       resolveReceivableStatus({
