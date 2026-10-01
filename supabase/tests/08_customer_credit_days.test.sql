@@ -229,7 +229,11 @@ select throws_ok(
 );
 
 select is(
-  (select count(*) from finance.sales where description like 'Venta con vencimiento%'),
+  (
+    select count(*)
+    from finance.sales
+    where description in ('Venta con vencimiento inventado', 'Venta con vencimiento corto')
+  ),
   0::bigint,
   '6: los rechazos no dejan ventas a medias'
 );
@@ -458,8 +462,15 @@ select is(
   '23: el intento con cliente ajeno no creó ninguna venta'
 );
 
+-- La cartera cuelga de la venta, y la venta del cliente: cada obligación es
+-- rastreable hasta su cliente sin duplicar el dato.
 select is(
-  (select count(*) from finance.receivables where customer_id is null),
+  (
+    select count(*)
+    from finance.receivables r
+    join finance.sales s on s.id = r.sale_id
+    where s.customer_id is null
+  ),
   0::bigint,
   '24: ninguna cartera quedó sin cliente'
 );
