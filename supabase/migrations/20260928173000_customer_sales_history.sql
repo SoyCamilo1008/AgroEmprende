@@ -56,7 +56,23 @@
 -- consultas correrian con los permisos del dueno de la vista y saltarian RLS.
 -- Mismo argumento que en `customer_receivables`: `ledger_entries` exige
 -- `finance.read`, `core.business_units` exige `org.read`.
-create or replace view finance.customer_sales as
+-- `security_invoker` es OBLIGATORIO, y va ANTES del `as`.
+--
+-- Sin esta opcion, PostgreSQL ejecuta el cuerpo de la vista con los privilegios de
+-- su DUENO, y el dueno de una vista creada por una migracion es el rol que la
+-- aplico. Las politicas RLS de `sales` y `ledger_entries` no se evaluarian, y la
+-- vista responderia con las ventas de TODAS las organizaciones. No es una fuga
+-- hipotetica: la asercion 15 de este archivo la sufrio en la primera version de
+-- esta migracion, que traia el comentario sobre `security_invoker` pero no la
+-- opcion. El comentario no protege; la opcion, si.
+--
+-- La opcion va antes del `as` porque `WITH` es palabra reservada de la sentencia
+-- `CREATE VIEW`: al final, despues del `where`, PostgreSQL responde
+-- `syntax error at or near "(" (SQLSTATE 42601)`. El orden lo dicta el gramama:
+-- `CREATE VIEW nombre WITH (opciones) AS consulta`.
+create or replace view finance.customer_sales
+with (security_invoker = true)
+as
 select
   s.organization_id,
   s.id as sale_id,
@@ -93,17 +109,7 @@ left join core.business_units bu
  and bu.id = s.business_unit_id
 -- Ver el bloque de arriba: sin `finance.read` el `exists` daria FALSE en vez de
 -- "desconocido", y una venta anulada se venderia como vigente.
-where private.has_permission('finance.read')
--- `security_invoker` es OBLIGATORIO y va al final de la definicion de la vista.
---
--- Sin esta opcion, PostgreSQL ejecuta el cuerpo de la vista con los privilegios de
--- su DUENO, y el dueno de una vista creada por una migracion es el rol que la
--- aplico. Las politicas RLS de `sales` y `ledger_entries` no se evaluarian, y la
--- vista responderia con las ventas de TODAS las organizaciones. No es una fuga
--- hipotetica: la asercion 15 de este archivo la sufrio en la primera version de
--- esta migracion, que traia el comentario sobre `security_invoker` pero no la
--- opcion. El comentario no protege; la opcion, si.
-with (security_invoker = true);
+where private.has_permission('finance.read');
 
 comment on view finance.customer_sales is
   'Historial de ventas de un cliente, con `is_voided` derivado del contra-asiento reversal del ledger (ADR-0003). NO filtra las anuladas: ocultarlas del historial seria borrar historia. Las ventas anuladas no aparecen en finance.customer_receivables. security_invoker: RLS de las tablas subyacentes sigue aplicando.';
