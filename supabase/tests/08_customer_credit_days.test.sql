@@ -160,7 +160,6 @@ $$;
 select tests.build_scenario();
 
 set local role authenticated;
-select tests.clear_session();
 select tests.act_as(tests.id('owner_a'));
 select tests.set_org_header(tests.id('org_a')::text);
 
@@ -356,7 +355,16 @@ select is(
   '14: una venta recién creada no está liquidada'
 );
 
-select public.register_payment(tests.id('bu_a'), date '2026-04-05', 'inbound', 'cash', 500);
+-- Asignación explícita a la cartera de cd_h2: las pruebas anteriores dejaron
+-- otras deudas abiertas y la FIFO por vencimiento las consumiría antes, así que
+-- este bloque no puede depender del orden.
+select public.register_payment(
+  tests.id('bu_a'), date '2026-04-05', 'inbound', 'cash', 500, null,
+  jsonb_build_array(jsonb_build_object(
+    'type', 'receivable',
+    'id', (select id from finance.receivables where sale_id = (select sale_id from cd_h2))
+  ))
+);
 
 select is(
   (
@@ -378,7 +386,13 @@ select is(
   '16: un pago parcial NO marca la cartera como liquidada'
 );
 
-select public.register_payment(tests.id('bu_a'), date '2026-04-10', 'inbound', 'cash', 500);
+select public.register_payment(
+  tests.id('bu_a'), date '2026-04-10', 'inbound', 'cash', 500, null,
+  jsonb_build_array(jsonb_build_object(
+    'type', 'receivable',
+    'id', (select id from finance.receivables where sale_id = (select sale_id from cd_h2))
+  ))
+);
 
 select is(
   (
