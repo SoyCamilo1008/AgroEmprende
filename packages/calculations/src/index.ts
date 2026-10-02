@@ -6,6 +6,13 @@
  * cálculos financieros y productivos: las pantallas NO recalculan.
  */
 export {
+  addDays,
+  businessDateIn,
+  businessToday,
+  DEFAULT_BUSINESS_TIME_ZONE,
+} from './business-date';
+
+export {
   addMoney,
   distributeMoney,
   formatMoney,
