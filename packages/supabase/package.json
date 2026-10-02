@@ -11,7 +11,8 @@
     "./env": "./src/env.ts",
     "./errors": "./src/errors.ts",
     "./rows": "./src/rows.ts",
-    "./repositories/customers": "./src/repositories/customers.ts"
+    "./repositories/customers": "./src/repositories/customers.ts",
+    "./repositories/customer-finance": "./src/repositories/customer-finance.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
@@ -21,6 +22,7 @@
     "clean": "rimraf .turbo coverage *.tsbuildinfo"
   },
   "dependencies": {
+    "@agroemprende/calculations": "workspace:*",
     "@agroemprende/validation": "workspace:*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.2",

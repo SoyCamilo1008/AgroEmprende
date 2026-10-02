@@ -410,6 +410,9 @@ importers:
 
   packages/supabase:
     dependencies:
+      '@agroemprende/calculations':
+        specifier: workspace:*
+        version: link:../calculations
       '@agroemprende/validation':
         specifier: workspace:*
         version: link:../validation

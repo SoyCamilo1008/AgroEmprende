@@ -49,6 +49,28 @@ const clearableText = <T extends z.ZodType<string>>(schema: T) =>
  * Las expresiones regulares y los rangos repiten los CHECK de la tabla para que
  * el error llegue antes de gastar la ida al servidor.
  */
+/**
+ * Los esquemas primitivos se re-exportan para que quien valida no tenga que
+ * reconstruirlos.
+ *
+ * `isoDateSchema` es el caso que importa: las lecturas de cartera reciben la fecha
+ * de NEGOCIO que decide si una obligacion esta vencida (ADR-0012), y ese parametro
+ * tiene que validarse con la MISMA regla que valida la fecha de una venta. Un
+ * repositorio que copiara el `YYYY-MM-DD` tendria dos reglas de fecha, y el dia que
+ * una cambiara la otra seguiria aceptando el formato viejo sin avisar.
+ */
+export {
+  businessUnitCodeSchema,
+  emailSchema,
+  isoDateSchema,
+  isoDateTimeSchema,
+  notesSchema,
+  pesoAmountSchema,
+  phoneSchema,
+  positiveQuantitySchema,
+  quantitySchema,
+  uuidSchema,
+} from './common';
 export const customerSchema = z.object({
   name: z.string().trim().min(2, 'El nombre es obligatorio').max(160),
   /** Código interno de la granja, opcional y único por organización. */

@@ -39,3 +39,12 @@ export {
   type CustomerSortColumn,
   type CustomerSummary,
 } from './repositories/customers';
+export {
+  createCustomerFinanceRepository,
+  CustomerFinanceRepository,
+  DEFAULT_CUSTOMER_FINANCE_PAGE_SIZE,
+  MAX_CUSTOMER_FINANCE_PAGE_SIZE,
+  RECEIVABLE_SORT_COLUMNS,
+  type CustomerReceivablesOptions,
+  type ReceivableSortColumn,
+} from './repositories/customer-finance';

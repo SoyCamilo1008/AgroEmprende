@@ -30,18 +30,24 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * aserción.
  */
 export interface RecordedCall {
-  op: 'select' | 'insert' | 'update';
+  op: 'select' | 'insert' | 'update' | 'rpc';
   readonly table: string;
   readonly schema: string;
   /** Columnas enviadas en un `insert`/`update`; `null` en un `select`. */
   columns: Record<string, unknown> | null;
   filters: Array<[string, unknown]>;
+  /** Filtros de rango y de comparacion, con su operador, para poder afirmar sobre el. */
+  comparisons: Array<[string, string, unknown]>;
   orFilters: string[];
   orders: Array<[string, boolean]>;
   range: [number, number] | null;
   single: 'single' | 'maybeSingle' | 'none';
   withCount: boolean;
   selectColumns: string | null;
+  /** Nombre de la funcion en un `rpc`; `null` en cualquier otra operacion. */
+  rpcName: string | null;
+  /** Parametros enviados a la funcion en un `rpc`; `null` en cualquier otra. */
+  rpcParams: Record<string, unknown> | null;
 }
 
 /** Respuesta que el doble devuelve para la siguiente consulta. */
@@ -124,12 +130,15 @@ class Chain {
       schema,
       columns: null,
       filters: [],
+      comparisons: [],
       orFilters: [],
       orders: [],
       range: null,
       single: 'none',
       withCount: false,
       selectColumns: null,
+      rpcName: null,
+      rpcParams: null,
     };
     this.#responses = responses;
   }
@@ -155,6 +164,31 @@ class Chain {
   eq(column: string, value: unknown): this {
     this.call.filters.push([column, value]);
     return this;
+  }
+
+  // Las comparaciones se registran aparte de `filters` porque un test que solo mira
+  // `filters` no podria afirmar "no filtres solo por cliente, filtra tambien por
+  // saldo positivo", que es justo lo que distingue una cartera real de una lista de
+  // todo. Mezclarlas en el mismo array hacia que el operador se perdiera.
+  #compare(operator: string, column: string, value: unknown): this {
+    this.call.comparisons.push([column, operator, value]);
+    return this;
+  }
+
+  gt(column: string, value: unknown): this {
+    return this.#compare('gt', column, value);
+  }
+
+  gte(column: string, value: unknown): this {
+    return this.#compare('gte', column, value);
+  }
+
+  lt(column: string, value: unknown): this {
+    return this.#compare('lt', column, value);
+  }
+
+  lte(column: string, value: unknown): this {
+    return this.#compare('lte', column, value);
   }
 
   or(filter: string): this {
@@ -235,6 +269,19 @@ export const createFakeSupabase = (...responses: StubbedResponse[]): FakeSupabas
       calls.push(chain.call);
       return chain;
     },
+    // `rpc` se registra como una llamada mas, con su nombre y sus parametros, para
+    // que un test pueda afirmar que la funcion del resumen se invoco con la fecha de
+    // negocio que le paso la aplicacion y no con la del servidor. Un doble que
+    // aceptara cualquier parametro en silencio no distinguiria las dos cosas, que es
+    // justo lo que esta prueba.
+    rpc: (fnName: string, params: Record<string, unknown>): Chain => {
+      const chain = new Chain(schemaName, `(${fnName})`, queue);
+      chain.call.op = 'rpc';
+      chain.call.rpcName = fnName;
+      chain.call.rpcParams = params;
+      calls.push(chain.call);
+      return chain;
+    },
   });
 
   return {
@@ -250,3 +297,131 @@ export const createFakeSupabase = (...responses: StubbedResponse[]): FakeSupabas
     },
   };
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filas de las vistas financieras
+//
+// Reflejan el SQL de las migraciones `20260928172000` y `20260928173000`.
+//
+// Un detalle que estos tests hacen explicito: los `numeric` de PostgreSQL viajan
+// como TEXTO por PostgREST, no como number. `numeric` no cabe en un double sin
+// perder precisión y el transporte no lo convierte. Las filas de aqui los traen
+// como string a proposito: si el repositorio los asumiera number, estos tests
+// fallarian, que es lo que tiene que pasar con una base real.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BUSINESS_UNIT = {
+  business_unit_id: '44444444-4444-4444-8444-444444444444',
+  business_unit_code: 'PONEDORAS',
+  business_unit_name: 'Ponederas',
+};
+
+const RECEIVABLE_ROW = {
+  organization_id: '22222222-2222-4222-8222-222222222222',
+  receivable_id: '55555555-5555-4555-8555-555555555555',
+  sale_id: '66666666-6666-4666-8666-666666666666',
+  customer_id: CUSTOMER_ROW.id,
+  ...BUSINESS_UNIT,
+  invoice_number: 'FV-0001',
+  sale_date: '2026-04-01',
+  due_date: '2026-05-01',
+  payment_method: 'credit',
+  // En PESOS, no en centavos: la conversion ocurre en el repositorio.
+  original_amount: '20000.00',
+  paid_amount: '4000.00',
+  balance: '16000.00',
+  paid_at: null,
+  created_at: '2026-04-01T14:00:00.000Z',
+};
+
+const SALE_ROW = {
+  organization_id: '22222222-2222-4222-8222-222222222222',
+  sale_id: '66666666-6666-4666-8666-666666666666',
+  customer_id: CUSTOMER_ROW.id,
+  ...BUSINESS_UNIT,
+  invoice_number: 'FV-0001',
+  sale_date: '2026-04-01',
+  due_date: '2026-05-01',
+  payment_method: 'credit',
+  subtotal: '20000.00',
+  tax: '0.00',
+  total: '20000.00',
+  description: 'Venta a credito',
+  created_by: null,
+  created_at: '2026-04-01T14:00:00.000Z',
+  is_voided: false,
+};
+
+const PAYMENT_ROW = {
+  organization_id: '22222222-2222-4222-8222-222222222222',
+  payment_id: '77777777-7777-4777-8777-777777777777',
+  customer_id: CUSTOMER_ROW.id,
+  payment_date: '2026-04-15',
+  payment_method: 'cash',
+  payment_amount: '4000.00',
+  unapplied_amount: '0.00',
+  description: 'Abono parcial',
+  applied_amount: '4000.00',
+  receivable_id: RECEIVABLE_ROW.receivable_id,
+  sale_id: RECEIVABLE_ROW.sale_id,
+  ...BUSINESS_UNIT,
+  invoice_number: 'FV-0001',
+  due_date: '2026-05-01',
+  created_at: '2026-04-15T10:00:00.000Z',
+};
+
+const SUMMARY_ROW = {
+  organization_id: '22222222-2222-4222-8222-222222222222',
+  business_unit_id: BUSINESS_UNIT.business_unit_id,
+  business_unit_code: 'PONEDORAS',
+  business_unit_name: 'Ponederas',
+  is_consolidated: false,
+  sales_count: 2,
+  cash_sales_count: 1,
+  credit_sales_count: 1,
+  receivable_count: 1,
+  open_count: 1,
+  partial_count: 1,
+  overdue_count: 1,
+  paid_count: 0,
+  total_sold: '30000.00',
+  cash_sales_total: '10000.00',
+  credit_billed: '20000.00',
+  total_paid: '4000.00',
+  outstanding: '16000.00',
+  overdue_outstanding: '16000.00',
+  oldest_open_due_date: '2026-05-01',
+};
+
+const CONSOLIDATED_SUMMARY_ROW = {
+  ...SUMMARY_ROW,
+  business_unit_id: null,
+  business_unit_code: null,
+  business_unit_name: null,
+  is_consolidated: true,
+};
+
+export const receivableRow = (overrides: Record<string, unknown> = {}) => ({
+  ...RECEIVABLE_ROW,
+  ...overrides,
+});
+
+export const saleRow = (overrides: Record<string, unknown> = {}) => ({
+  ...SALE_ROW,
+  ...overrides,
+});
+
+export const paymentRow = (overrides: Record<string, unknown> = {}) => ({
+  ...PAYMENT_ROW,
+  ...overrides,
+});
+
+export const summaryRow = (overrides: Record<string, unknown> = {}) => ({
+  ...SUMMARY_ROW,
+  ...overrides,
+});
+
+export const consolidatedSummaryRow = (overrides: Record<string, unknown> = {}) => ({
+  ...CONSOLIDATED_SUMMARY_ROW,
+  ...overrides,
+});

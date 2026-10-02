@@ -74,6 +74,20 @@ export {
   SETTLEMENT_METHODS,
 } from './finance';
 
+// Cartera, historial y resumen del cliente: las tres lecturas que la aplicacion
+// pide. Las cifras se derivan en PostgreSQL (migraciones 20260928172000 y
+// 20260928173000), no se guardan.
+export type {
+  BusinessUnitRef,
+  CustomerFinancialSummary,
+  CustomerFinancialSummaryRow,
+  CustomerFinanceListOptions,
+  CustomerFinancePage,
+  CustomerPayment,
+  CustomerReceivable,
+  CustomerSale,
+} from './customer-finance';
+
 export type {
   DailyProduction,
   DataOrigin,
