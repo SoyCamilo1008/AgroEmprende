@@ -66,7 +66,9 @@ describe('businessDateIn', () => {
   });
 
   it('avisa si el instante no es una fecha', () => {
-    expect(() => businessDateIn('America/Bogota', new Date('no soy una fecha'))).toThrow(RangeError);
+    expect(() => businessDateIn('America/Bogota', new Date('no soy una fecha'))).toThrow(
+      RangeError,
+    );
   });
 });
 
